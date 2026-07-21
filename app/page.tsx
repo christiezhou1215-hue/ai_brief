@@ -11,15 +11,16 @@ type SourceStatus = { name: string; mark: string; type: "rss" | "atom"; homepage
 type ArticleDetail = { title: string; description: string; publishedAt: string; excerpts: string[]; images: Array<{ url: string; alt: string }>; aiSummary: { overview: string; keyPoints: string[] }; fetchedAt: string };
 
 const nav = [["✦", "今日简报"], ["▤", "资讯流"], ["♡", "收藏"], ["◉", "数据源管理"]];
-const defaultSources = ["OpenAI", "Google AI", "Google DeepMind", "Google Research", "Hugging Face", "AWS · Machine Learning", "NVIDIA · Generative AI", "Apple Machine Learning", "GitHub · AI & ML", "Microsoft Research", "PyTorch", "TensorFlow", "Cloudflare · AI", "Databricks", "Mozilla AI", "Berkeley AI Research", "MIT · AI News", "MIT Technology Review", "TechCrunch · AI", "VentureBeat · AI", "The Decoder", "雷峰网", "36氪", "IT之家", "博客园", "爱范儿", "量子位", "InfoQ 中文", "arXiv · cs.AI", "arXiv · cs.CL", "arXiv · cs.LG"];
+const additionalSources = ["Anthropic", "Meta AI", "Microsoft AI", "Google Cloud AI", "NVIDIA Developer", "IBM AI", "Salesforce AI", "Adobe AI", "Oracle AI", "Intel AI", "Hugging Face Papers", "LangChain", "LlamaIndex", "Weights & Biases", "Pinecone", "Weaviate", "Qdrant", "Replicate", "Cohere", "Mistral AI", "Stability AI", "Together AI", "Groq", "Cerebras", "Scale AI", "Stanford HAI", "Allen AI", "IEEE Spectrum · AI", "Ars Technica · AI", "WIRED · AI", "The Verge · AI", "KDnuggets", "Machine Learning Mastery", "SemiAnalysis", "Import AI", "Interconnects", "arXiv · cs.CV", "arXiv · cs.RO", "arXiv · cs.IR", "arXiv · stat.ML"];
+const defaultSources = ["OpenAI", "Google AI", "Google DeepMind", "Google Research", "Hugging Face", "AWS · Machine Learning", "NVIDIA · Generative AI", "Apple Machine Learning", "GitHub · AI & ML", "Microsoft Research", "PyTorch", "TensorFlow", "Cloudflare · AI", "Databricks", "Mozilla AI", "Berkeley AI Research", "MIT · AI News", "MIT Technology Review", "TechCrunch · AI", "VentureBeat · AI", "The Decoder", "雷峰网", "36氪", "IT之家", "博客园", "爱范儿", "量子位", "InfoQ 中文", "arXiv · cs.AI", "arXiv · cs.CL", "arXiv · cs.LG", ...additionalSources];
 const legacySources = ["OpenAI", "Google AI", "Hugging Face", "arXiv · cs.AI"];
 const expandedSources = ["Apple Machine Learning", "GitHub · AI & ML", "Microsoft Research", "Berkeley AI Research", "MIT · AI News", "MIT Technology Review", "TechCrunch · AI", "VentureBeat · AI", "The Decoder"];
 const chineseSources = ["雷峰网", "36氪", "IT之家", "博客园", "爱范儿"];
 const latestSources = ["Google Research", "PyTorch", "TensorFlow", "Cloudflare · AI", "Databricks", "Mozilla AI", "量子位", "InfoQ 中文"];
 const pageSize = 12;
 const sourceGroup = (name: string) => {
-  if (["OpenAI", "Google AI", "Google DeepMind", "Google Research", "Microsoft Research", "Apple Machine Learning", "NVIDIA · Generative AI", "AWS · Machine Learning", "Berkeley AI Research", "MIT · AI News"].includes(name)) return "官方实验室与企业";
-  if (["Hugging Face", "GitHub · AI & ML", "PyTorch", "TensorFlow", "Cloudflare · AI", "Databricks", "Mozilla AI"].includes(name)) return "开发者与开源社区";
+  if (["OpenAI", "Anthropic", "Meta AI", "Google AI", "Google DeepMind", "Google Research", "Google Cloud AI", "Microsoft AI", "Microsoft Research", "Apple Machine Learning", "NVIDIA · Generative AI", "NVIDIA Developer", "AWS · Machine Learning", "IBM AI", "Salesforce AI", "Adobe AI", "Oracle AI", "Intel AI", "Cohere", "Mistral AI", "Stability AI", "Together AI", "Groq", "Cerebras", "Scale AI", "Berkeley AI Research", "MIT · AI News"].includes(name)) return "官方实验室与企业";
+  if (["Hugging Face", "Hugging Face Papers", "GitHub · AI & ML", "PyTorch", "TensorFlow", "Cloudflare · AI", "Databricks", "Mozilla AI", "LangChain", "LlamaIndex", "Weights & Biases", "Pinecone", "Weaviate", "Qdrant", "Replicate"].includes(name)) return "开发者与开源社区";
   if (name.startsWith("arXiv")) return "学术研究";
   if (["雷峰网", "36氪", "IT之家", "博客园", "爱范儿", "量子位", "InfoQ 中文"].includes(name)) return "中文科技媒体";
   return "国际科技媒体";
@@ -84,7 +85,7 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("全部分类");
   const [level, setLevel] = useState("全部级别");
-  const [sort, setSort] = useState("重要优先");
+  const [sort, setSort] = useState("综合排序");
   const [view, setView] = useState<"cards" | "list">("cards");
   const [saved, setSaved] = useState<string[]>([]);
   const [savedStories, setSavedStories] = useState<Record<string, Story>>({});
@@ -134,9 +135,10 @@ export default function Home() {
     const storedSources = window.localStorage.getItem("ai-brief-enabled-sources");
     const sourceVersion = window.localStorage.getItem("ai-brief-source-version");
     const storedEnabled = storedSources ? JSON.parse(storedSources) as string[] : defaultSources;
-    const migratedSources = sourceVersion === "5" ? storedEnabled : sourceVersion === "4" ? [...new Set([...storedEnabled, ...latestSources])] : sourceVersion === "3" ? [...new Set([...storedEnabled, ...chineseSources, ...latestSources])] : sourceVersion === "2" ? [...new Set([...storedEnabled, ...expandedSources, ...chineseSources, ...latestSources])] : [...new Set([...storedEnabled, ...defaultSources.filter((name) => !legacySources.includes(name))])];
+    const previousMigration = sourceVersion === "5" ? storedEnabled : sourceVersion === "4" ? [...new Set([...storedEnabled, ...latestSources])] : sourceVersion === "3" ? [...new Set([...storedEnabled, ...chineseSources, ...latestSources])] : sourceVersion === "2" ? [...new Set([...storedEnabled, ...expandedSources, ...chineseSources, ...latestSources])] : [...new Set([...storedEnabled, ...defaultSources.filter((name) => !legacySources.includes(name))])];
+    const migratedSources = sourceVersion === "6" ? storedEnabled : [...new Set([...previousMigration, ...additionalSources])];
     setEnabledSources(migratedSources);
-    window.localStorage.setItem("ai-brief-source-version", "5");
+    window.localStorage.setItem("ai-brief-source-version", "6");
     setStorageReady(true);
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); document.querySelector<HTMLInputElement>(".global-search input")?.focus(); }
@@ -181,9 +183,18 @@ export default function Home() {
     const matchLevel = level === "全部级别" || s.level === level;
     const matchSaved = active !== "收藏" || saved.includes(s.id);
     const matchSource = active === "收藏" || (enabledSources ?? defaultSources).includes(s.source);
-    return matchQuery && matchCategory && matchLevel && matchSaved && matchSource;
+    const ageDays = Math.max(0, (Date.now() - new Date(s.publishedAt).getTime()) / 86_400_000);
+    const matchRecency = active === "收藏" || ageDays <= (active === "今日简报" ? 14 : 45);
+    return matchQuery && matchCategory && matchLevel && matchSaved && matchSource && matchRecency;
   }).sort((a, b) => {
-    if (sort === "重要优先") return ((b.score ?? { 重要: 75, 关注: 50, 一般: 25 }[b.level]) - (a.score ?? { 重要: 75, 关注: 50, 一般: 25 }[a.level])) || new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+    if (sort === "综合排序") {
+      const combined = (story: Story) => {
+        const importance = story.score ?? { 重要: 75, 关注: 50, 一般: 25 }[story.level];
+        const ageHours = Math.max(0, (Date.now() - new Date(story.publishedAt).getTime()) / 3_600_000);
+        return importance + Math.max(0, 42 - ageHours / 8);
+      };
+      return combined(b) - combined(a) || new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+    }
     return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
   }), [availableStories, query, category, level, sort, active, saved, enabledSources]);
 
@@ -322,7 +333,7 @@ export default function Home() {
             <div className="filter-row">
               <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="资讯分类"><option>全部分类</option><option>模型发布</option><option>AI Agent</option><option>AI 编程</option><option>多模态</option><option>开源项目</option><option>学术研究</option><option>行业动态</option></select>
               <select value={level} onChange={(e) => setLevel(e.target.value)} aria-label="重要程度"><option>全部级别</option><option>重要</option><option>关注</option><option>一般</option></select>
-              <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="排序方式"><option>重要优先</option><option>时间优先</option></select>
+              <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="排序方式"><option>综合排序</option><option>时间优先</option></select>
               {(category !== "全部分类" || level !== "全部级别" || query) && <button className="clear" onClick={clearFilters}>清除筛选 ×</button>}
             </div>
             <div className="view-row"><p>{active === "今日简报" ? `共 ${filtered.length} 条精选资讯 · 第 ${page} / ${totalPages} 页` : `共找到 ${filtered.length} 条资讯 · 第 ${page} / ${totalPages} 页`}</p><div className="view-tools"><button className="translate-page" onClick={() => void translateCurrentPage()} disabled={translatingPage || !pagedStories.length}>译 {translatingPage ? "正在转换中文…" : showChinese && pagedStories.every((story) => !needsChineseTranslation(story) || storyTranslations[story.id]) ? "查看英文" : "显示中文"}</button>{active === "今日简报" ? <span className="stream-label">每页 9 条</span> : active === "资讯流" ? <span className="stream-label">精简时间线</span> : <div className="view-switch"><button className={view === "cards" ? "active" : ""} onClick={() => setView("cards")} aria-label="卡片视图">▦</button><button className={view === "list" ? "active" : ""} onClick={() => setView("list")} aria-label="列表视图">☷</button></div>}</div></div>
