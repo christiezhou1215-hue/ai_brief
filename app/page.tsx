@@ -213,7 +213,7 @@ export default function Home() {
   useEffect(() => {
     if (loading || filtered.length < 3 || active !== "今日简报") return;
     const controller = new AbortController();
-    fetch("/api/insight", { method: "POST", signal: controller.signal, headers: { "content-type": "application/json" }, body: JSON.stringify({ stories: filtered.slice(0, 35).map(({ title, source, summary, level, publishedAt }) => ({ title, source, summary, level, publishedAt })) }) })
+    fetch("/api/insight", { method: "POST", signal: controller.signal })
       .then(async (response) => response.ok ? response.json() as Promise<DailyInsight> : null)
       .then((value) => { if (value?.summary) setDailyInsight(value); })
       .catch(() => undefined);
