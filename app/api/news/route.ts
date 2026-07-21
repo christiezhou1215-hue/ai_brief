@@ -27,6 +27,42 @@ const sources: Source[] = [
   { name: "TechCrunch · AI", mark: "TC", url: "https://techcrunch.com/category/artificial-intelligence/feed/", type: "rss" },
   { name: "VentureBeat · AI", mark: "VB", url: "https://venturebeat.com/category/ai/feed/", type: "rss" },
   { name: "The Decoder", mark: "TD", url: "https://the-decoder.com/feed/", type: "rss" },
+  { name: "Anthropic", mark: "AN", url: "https://www.anthropic.com/rss.xml", type: "rss" },
+  { name: "Meta AI", mark: "M", url: "https://ai.meta.com/blog/rss/", type: "rss" },
+  { name: "Microsoft AI", mark: "MA", url: "https://blogs.microsoft.com/ai/feed/", type: "rss" },
+  { name: "Google Cloud AI", mark: "GC", url: "https://cloud.google.com/blog/products/ai-machine-learning/rss", type: "rss" },
+  { name: "NVIDIA Developer", mark: "ND", url: "https://developer.nvidia.com/blog/feed/", type: "rss", aiOnly: true },
+  { name: "IBM AI", mark: "IBM", url: "https://www.ibm.com/blog/category/artificial-intelligence/feed/", type: "rss" },
+  { name: "Salesforce AI", mark: "SF", url: "https://www.salesforce.com/news/stories/category/ai/feed/", type: "rss" },
+  { name: "Adobe AI", mark: "AD", url: "https://blog.adobe.com/en/topics/ai-ml.feed.xml", type: "rss" },
+  { name: "Oracle AI", mark: "OR", url: "https://blogs.oracle.com/ai-and-datascience/rss", type: "rss" },
+  { name: "Intel AI", mark: "IN", url: "https://community.intel.com/t5/Blogs/Tech-Innovation/Artificial-Intelligence-AI/bg-p/blog-ai/rss", type: "rss" },
+  { name: "Hugging Face Papers", mark: "HP", url: "https://huggingface.co/papers/feed.xml", type: "rss" },
+  { name: "LangChain", mark: "LC", url: "https://blog.langchain.com/rss/", type: "rss" },
+  { name: "LlamaIndex", mark: "LI", url: "https://www.llamaindex.ai/blog/rss.xml", type: "rss" },
+  { name: "Weights & Biases", mark: "WB", url: "https://wandb.ai/fully-connected/rss.xml", type: "rss" },
+  { name: "Pinecone", mark: "PC", url: "https://www.pinecone.io/blog/rss/", type: "rss" },
+  { name: "Weaviate", mark: "WV", url: "https://weaviate.io/blog/rss.xml", type: "rss" },
+  { name: "Qdrant", mark: "QD", url: "https://qdrant.tech/articles/index.xml", type: "rss" },
+  { name: "Replicate", mark: "RP", url: "https://replicate.com/blog/rss", type: "rss" },
+  { name: "Cohere", mark: "CO", url: "https://cohere.com/blog/rss.xml", type: "rss" },
+  { name: "Mistral AI", mark: "MI", url: "https://mistral.ai/news/rss.xml", type: "rss" },
+  { name: "Stability AI", mark: "ST", url: "https://stability.ai/news/rss", type: "rss" },
+  { name: "Together AI", mark: "TO", url: "https://www.together.ai/blog/rss.xml", type: "rss" },
+  { name: "Groq", mark: "GQ", url: "https://groq.com/blog/rss.xml", type: "rss" },
+  { name: "Cerebras", mark: "CB", url: "https://www.cerebras.ai/blog/rss.xml", type: "rss" },
+  { name: "Scale AI", mark: "SC", url: "https://scale.com/blog/rss.xml", type: "rss" },
+  { name: "Stanford HAI", mark: "SH", url: "https://hai.stanford.edu/news/rss.xml", type: "rss" },
+  { name: "Allen AI", mark: "AA", url: "https://allenai.org/blog/feed.xml", type: "rss" },
+  { name: "IEEE Spectrum · AI", mark: "IE", url: "https://spectrum.ieee.org/feeds/topic/artificial-intelligence.rss", type: "rss" },
+  { name: "Ars Technica · AI", mark: "AR", url: "https://feeds.arstechnica.com/arstechnica/technology-lab", type: "rss", aiOnly: true },
+  { name: "WIRED · AI", mark: "WI", url: "https://www.wired.com/feed/tag/ai/latest/rss", type: "rss" },
+  { name: "The Verge · AI", mark: "TV", url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", type: "rss" },
+  { name: "KDnuggets", mark: "KD", url: "https://www.kdnuggets.com/feed", type: "rss", aiOnly: true },
+  { name: "Machine Learning Mastery", mark: "MM", url: "https://machinelearningmastery.com/blog/feed/", type: "rss" },
+  { name: "SemiAnalysis", mark: "SA", url: "https://semianalysis.com/feed", type: "rss", aiOnly: true },
+  { name: "Import AI", mark: "IA", url: "https://jack-clark.net/feed/", type: "rss", aiOnly: true },
+  { name: "Interconnects", mark: "IC", url: "https://www.interconnects.ai/feed", type: "rss", aiOnly: true },
   { name: "雷峰网", mark: "雷", url: "https://www.leiphone.com/feed", type: "rss", aiOnly: true },
   { name: "36氪", mark: "36", url: "https://36kr.com/feed", type: "rss", aiOnly: true },
   { name: "IT之家", mark: "IT", url: "https://www.ithome.com/rss/", type: "rss", aiOnly: true },
@@ -37,11 +73,15 @@ const sources: Source[] = [
   { name: "arXiv · cs.AI", mark: "AX", url: "https://export.arxiv.org/api/query?search_query=cat:cs.AI&start=0&max_results=15&sortBy=submittedDate&sortOrder=descending", type: "atom" },
   { name: "arXiv · cs.CL", mark: "CL", url: "https://export.arxiv.org/api/query?search_query=cat:cs.CL&start=0&max_results=15&sortBy=submittedDate&sortOrder=descending", type: "atom" },
   { name: "arXiv · cs.LG", mark: "ML", url: "https://export.arxiv.org/api/query?search_query=cat:cs.LG&start=0&max_results=15&sortBy=submittedDate&sortOrder=descending", type: "atom" },
+  { name: "arXiv · cs.CV", mark: "CV", url: "https://export.arxiv.org/api/query?search_query=cat:cs.CV&start=0&max_results=15&sortBy=submittedDate&sortOrder=descending", type: "atom" },
+  { name: "arXiv · cs.RO", mark: "RO", url: "https://export.arxiv.org/api/query?search_query=cat:cs.RO&start=0&max_results=15&sortBy=submittedDate&sortOrder=descending", type: "atom" },
+  { name: "arXiv · cs.IR", mark: "IR", url: "https://export.arxiv.org/api/query?search_query=cat:cs.IR&start=0&max_results=15&sortBy=submittedDate&sortOrder=descending", type: "atom" },
+  { name: "arXiv · stat.ML", mark: "SM", url: "https://export.arxiv.org/api/query?search_query=cat:stat.ML&start=0&max_results=15&sortBy=submittedDate&sortOrder=descending", type: "atom" },
 ];
 
 const homepageFor = (source: Source) => {
   const custom: Record<string, string> = {
-    "arXiv · cs.AI": "https://arxiv.org/list/cs.AI/recent", "arXiv · cs.CL": "https://arxiv.org/list/cs.CL/recent", "arXiv · cs.LG": "https://arxiv.org/list/cs.LG/recent",
+    "arXiv · cs.AI": "https://arxiv.org/list/cs.AI/recent", "arXiv · cs.CL": "https://arxiv.org/list/cs.CL/recent", "arXiv · cs.LG": "https://arxiv.org/list/cs.LG/recent", "arXiv · cs.CV": "https://arxiv.org/list/cs.CV/recent", "arXiv · cs.RO": "https://arxiv.org/list/cs.RO/recent", "arXiv · cs.IR": "https://arxiv.org/list/cs.IR/recent", "arXiv · stat.ML": "https://arxiv.org/list/stat.ML/recent",
     "博客园": "https://www.cnblogs.com/", "InfoQ 中文": "https://www.infoq.cn/", "IT之家": "https://www.ithome.com/",
   };
   return custom[source.name] ?? new URL(source.url).origin;
@@ -102,7 +142,7 @@ function tagsFor(title: string, source: string, category: string) {
   return [...new Set(candidates.filter((tag) => tag === source || tag === category || title.toLowerCase().includes(tag.toLowerCase())))].slice(0, 4);
 }
 
-const officialSources = new Set(["OpenAI", "Google AI", "Google DeepMind", "Google Research", "Hugging Face", "AWS · Machine Learning", "NVIDIA · Generative AI", "Apple Machine Learning", "GitHub · AI & ML", "Microsoft Research", "PyTorch", "TensorFlow", "Cloudflare · AI", "Databricks", "Mozilla AI", "Berkeley AI Research", "MIT · AI News"]);
+const officialSources = new Set(["OpenAI", "Anthropic", "Meta AI", "Google AI", "Google DeepMind", "Google Research", "Google Cloud AI", "Hugging Face", "AWS · Machine Learning", "NVIDIA · Generative AI", "NVIDIA Developer", "Apple Machine Learning", "GitHub · AI & ML", "Microsoft AI", "Microsoft Research", "IBM AI", "Salesforce AI", "Adobe AI", "Oracle AI", "Intel AI", "Cohere", "Mistral AI", "Stability AI", "Together AI", "Groq", "Cerebras", "Scale AI", "PyTorch", "TensorFlow", "Cloudflare · AI", "Databricks", "Mozilla AI", "Berkeley AI Research", "MIT · AI News", "Stanford HAI", "Allen AI"]);
 
 function importanceFor(item: Pick<NewsItem, "title" | "summary" | "source" | "category" | "related">) {
   const text = `${item.title} ${item.summary}`.toLowerCase();
