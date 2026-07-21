@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { generateJson } from "../../../lib/ai";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +94,13 @@ export async function GET(request: Request) {
     const publishedAt = meta(html, "article:published_time") || meta(html, "citation_date") || meta(html, "date");
     const excerpts = paragraphs.filter((paragraph) => paragraph !== description).slice(0, 3).map((paragraph) => completeText(paragraph, 460)).filter(Boolean);
     const images = extractImages(html, article, target);
-    return NextResponse.json({ title, description: completeText(description, 520), publishedAt, excerpts, images, aiSummary: summarize(title, description, paragraphs), fetchedAt: new Date().toISOString() }, { headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" } });
+    const fallbackSummary = summarize(title, description, paragraphs);
+    const generated = await generateJson<{ overview: string; keyPoints: string[] }>(
+      "你是AI科技资讯编辑。请只基于所给原文生成中文摘要，不补充原文没有的事实。输出JSON：overview为120-220字完整概览；keyPoints为3-5条互不重复的完整句子。保留关键数字、产品名、时间和限制条件，删除媒体套话。",
+      JSON.stringify({ title, description, paragraphs: paragraphs.slice(0, 8) }),
+    );
+    const aiSummary = generated?.overview && Array.isArray(generated.keyPoints) ? { overview: generated.overview, keyPoints: generated.keyPoints.slice(0, 5) } : fallbackSummary;
+    return NextResponse.json({ title, description: completeText(description, 520), publishedAt, excerpts, images, aiSummary, aiGenerated: Boolean(generated), fetchedAt: new Date().toISOString() }, { headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" } });
   } catch { return NextResponse.json({ error: "暂时无法读取原文页面" }, { status: 502 }); }
   finally { clearTimeout(timer); }
 }
