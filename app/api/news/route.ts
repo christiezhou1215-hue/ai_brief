@@ -141,7 +141,7 @@ async function fetchSource(source: Source): Promise<NewsItem[]> {
       const publishedAt = decode(field(block, atom ? "published" : "pubDate") || field(block, "updated"));
       const url = link(block, atom);
       const category = classify(title, summary);
-      return { id: `${source.mark}-${index}-${publishedAt}`, title, source: source.name, sourceMark: source.mark, publishedAt, category, level: "一般", score: 0, whyImportant: "", summary, imageUrl: imageFrom(block, url), tags: tagsFor(title, source.name, category), url, related: 1 };
+      return { id: `${source.mark}-${index}-${publishedAt}`, title, source: source.name, sourceMark: source.mark, publishedAt, category, level: "一般" as const, score: 0, whyImportant: "", summary, imageUrl: imageFrom(block, url), tags: tagsFor(title, source.name, category), url, related: 1 };
     }).filter((item) => item.title && item.url && (!source.aiOnly || /\bai\b|人工智能|大模型|模型|智能体|机器人|算法|芯片|gpt|claude|gemini|deepseek|llm/i.test(`${item.title} ${item.summary}`)));
   } finally { clearTimeout(timer); }
 }
