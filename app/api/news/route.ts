@@ -169,7 +169,7 @@ async function fetchSource(source: Source): Promise<NewsItem[]> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 9000);
   try {
-    const response = await fetch(source.url, { signal: controller.signal, headers: { "user-agent": "AI-Brief/1.0 (+daily-news-reader)", accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" }, cf: { cacheTtl: 900, cacheEverything: true } } as RequestInit & { cf: { cacheTtl: number; cacheEverything: boolean } });
+    const response = await fetch(source.url, { signal: controller.signal, headers: { "user-agent": "AI-Brief/1.0 (+daily-news-reader)", accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" }, cf: { cacheTtl: 1800, cacheEverything: true } } as RequestInit & { cf: { cacheTtl: number; cacheEverything: boolean } });
     if (!response.ok) throw new Error(`${source.name}: ${response.status}`);
     const xml = await response.text();
     const atom = source.type === "atom";
@@ -201,5 +201,5 @@ export async function GET(request: Request) {
   }
   const items = [...seen.values()].map((item) => ({ ...item, ...importanceFor(item) })).sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 600);
   const sourceStatuses = activeSources.map((source, index) => ({ name: source.name, mark: source.mark, type: source.type, homepage: homepageFor(source), itemCount: results[index].status === "fulfilled" ? results[index].value.length : 0, ok: results[index].status === "fulfilled" }));
-  return NextResponse.json({ items, updatedAt: new Date().toISOString(), sourceCount: activeSources.length - failures.length, totalSources: activeSources.length, failures, sources: sourceStatuses }, { headers: { "Cache-Control": "public, s-maxage=900, stale-while-revalidate=1800" } });
+  return NextResponse.json({ items, updatedAt: new Date().toISOString(), sourceCount: activeSources.length - failures.length, totalSources: activeSources.length, failures, sources: sourceStatuses }, { headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" } });
 }
