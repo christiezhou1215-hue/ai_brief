@@ -8,7 +8,8 @@ type Story = {
   tags: string[]; related: number; imageUrl?: string;
 };
 type SourceStatus = { name: string; mark: string; type: "rss" | "atom"; homepage: string; itemCount: number; ok: boolean };
-type ArticleDetail = { title: string; description: string; publishedAt: string; excerpts: string[]; images: Array<{ url: string; alt: string }>; aiSummary: { overview: string; keyPoints: string[] }; fetchedAt: string };
+type ArticleDetail = { title: string; description: string; publishedAt: string; excerpts: string[]; images: Array<{ url: string; alt: string }>; aiSummary: { overview: string; keyPoints: string[] }; aiGenerated?: boolean; fetchedAt: string };
+type DailyInsight = { summary: string; trends: Array<{ title: string; reason: string }>; generatedBy?: string };
 
 const nav = [["✦", "今日简报"], ["▤", "资讯流"], ["♡", "收藏"], ["◉", "数据源管理"]];
 const additionalSources = ["Anthropic", "Meta AI", "Microsoft AI", "Google Cloud AI", "NVIDIA Developer", "IBM AI", "Salesforce AI", "Adobe AI", "Oracle AI", "Intel AI", "Hugging Face Papers", "LangChain", "LlamaIndex", "Weights & Biases", "Pinecone", "Weaviate", "Qdrant", "Replicate", "Cohere", "Mistral AI", "Stability AI", "Together AI", "Groq", "Cerebras", "Scale AI", "Stanford HAI", "Allen AI", "IEEE Spectrum · AI", "Ars Technica · AI", "WIRED · AI", "The Verge · AI", "KDnuggets", "Machine Learning Mastery", "SemiAnalysis", "Import AI", "Interconnects", "arXiv · cs.CV", "arXiv · cs.RO", "arXiv · cs.IR", "arXiv · stat.ML"];
@@ -109,6 +110,7 @@ export default function Home() {
   const [page, setPage] = useState(1);
   const [sourceQuery, setSourceQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState("全部状态");
+  const [dailyInsight, setDailyInsight] = useState<DailyInsight | null>(null);
 
   const loadNews = useCallback(async (source = "") => {
     setLoading(true); setError("");
@@ -207,6 +209,16 @@ export default function Home() {
       return weight[b.level] - weight[a.level] || new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
     }).slice(0, 5), [pagedStories]);
   const briefSummary = useMemo(() => buildDailyInsight(filtered.slice(0, 80)), [filtered]);
+
+  useEffect(() => {
+    if (loading || filtered.length < 3 || active !== "今日简报") return;
+    const controller = new AbortController();
+    fetch("/api/insight", { method: "POST", signal: controller.signal, headers: { "content-type": "application/json" }, body: JSON.stringify({ stories: filtered.slice(0, 35).map(({ title, source, summary, level, publishedAt }) => ({ title, source, summary, level, publishedAt })) }) })
+      .then(async (response) => response.ok ? response.json() as Promise<DailyInsight> : null)
+      .then((value) => { if (value?.summary) setDailyInsight(value); })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [loading, active, filtered]);
 
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 2200); };
   const toggleSaved = (story: Story) => {
@@ -311,8 +323,8 @@ export default function Home() {
           </div>
 
           {active === "今日简报" && <section className="daily-brief">
-            <div className="brief-main"><div className="spark">✦</div><div><div className="brief-title"><span>今日 AI 一句话总结</span><small>AI 生成</small></div><p>{briefSummary}</p></div></div>
-            <div className="trend-list"><span className="trend-label">今日核心趋势</span>{briefStories.map((story, index) => <button key={story.id} onClick={() => setSelected(story)}><b>0{index + 1}</b><span className="trend-title">{cleanTitle(storyTranslations[story.id]?.title || (!needsChineseTranslation(story) ? story.title : "正在提炼趋势…"), story.source)}</span><i>↗</i></button>)}</div>
+            <div className="brief-main"><div className="spark">✦</div><div><div className="brief-title"><span>今日 AI 一句话总结</span><small>{dailyInsight ? "大模型生成" : "智能提炼"}</small></div><p>{dailyInsight?.summary || briefSummary}</p></div></div>
+            <div className="trend-list"><span className="trend-label">今日核心趋势</span>{dailyInsight?.trends?.length ? dailyInsight.trends.slice(0, 5).map((trend, index) => <div className="trend-item" key={`${trend.title}-${index}`} title={trend.reason}><b>0{index + 1}</b><span className="trend-title">{trend.title}</span></div>) : briefStories.map((story, index) => <button key={story.id} onClick={() => setSelected(story)}><b>0{index + 1}</b><span className="trend-title">{cleanTitle(storyTranslations[story.id]?.title || (!needsChineseTranslation(story) ? story.title : "正在提炼趋势…"), story.source)}</span><i>↗</i></button>)}</div>
           </section>}
 
           {active === "数据源管理" && <section className="source-manager">
@@ -364,7 +376,7 @@ export default function Home() {
             {articleDetail?.excerpts.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
             {articleDetail && <small>已于 {formatDate(articleDetail.fetchedAt)} 从原文页面提取</small>}
           </div>
-          <div className="drawer-section ai-summary"><div className="ai-summary-title"><span>✦</span><div><h3>AI 摘要</h3><small>基于原文自动提炼</small></div></div>
+          <div className="drawer-section ai-summary"><div className="ai-summary-title"><span>✦</span><div><h3>AI 摘要</h3><small>{articleDetail?.aiGenerated ? "大模型阅读全文生成" : "基于原文智能提炼"}</small></div></div>
             {articleLoading ? <p>正在阅读原文并生成摘要…</p> : <><p>{highlightKeyText(selectedTranslation?.summary || articleDetail?.aiSummary.overview || selected.summary)}</p>{detailPoints.length ? <><h4>关键信息</h4><ul>{detailPoints.map((point, index) => <li key={index}><b>0{index + 1}</b><span>{highlightKeyText(point)}</span></li>)}</ul></> : null}</>}
           </div>
           <div className="drawer-actions"><button onClick={() => toggleSaved(selected)}>{saved.includes(selected.id) ? "♥ 已收藏" : "♡ 收藏"}</button><a className="primary" href={selected.url} target="_blank" rel="noreferrer">阅读原文 ↗</a></div>
