@@ -20,7 +20,7 @@ const nav = [
   { icon: "▦", label: "今日资讯" },
   { icon: "✦", label: "AI 问答" },
   { icon: "♡", label: "我的收藏" },
-  { icon: "◉", label: "数据源" },
+  { icon: "◉", label: "数据源网络" },
 ];
 const formatDate = (value: string) => {
   const date = new Date(value);
@@ -336,7 +336,7 @@ export default function Home() {
         <span className="nav-icon">{item.icon}</span><span>{item.label}</span>
       </button>)}</nav>
       <button className={`settings-entry ${active === "设置" ? "active" : ""}`} onClick={() => setActive("设置")}><span className="nav-icon">⚙</span><span>设置</span></button>
-      <button className="source-pulse" onClick={() => setActive("数据源")} aria-label="查看数据源状态">
+      <button className="source-pulse" onClick={() => setActive("数据源网络")} aria-label="查看数据源状态">
         <span className="pulse-dot" />
         <div><b>{sources.filter((item) => item.ok).length}/{sources.length || "—"} 数据源在线</b><small>实时信号监测</small></div>
         <i>→</i>
@@ -432,7 +432,7 @@ export default function Home() {
           <div className="ask-composer"><textarea value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(); } }} placeholder="问任何关于 AI 行业、产品、模型或趋势的问题…" /><div><button className={`composer-source-switch ${referenceNews ? "on" : ""}`} onClick={() => setReferenceNews((value) => !value)} role="switch" aria-checked={referenceNews}><i /><span>参考 AI 资讯</span></button><span>Enter 发送</span><button onClick={() => void ask()} disabled={!question.trim() || asking}>发送 <b>↑</b></button></div></div>
         </section>}
 
-        {active === "数据源" && <section className="sources-page reveal">
+        {active === "数据源网络" && <section className="sources-page reveal">
           <div className="page-intro"><div><span className="eyebrow">SOURCE INTELLIGENCE</span><h1>数据源网络</h1><p>连接全球实验室、学术机构与科技媒体，持续汇集可靠的一手信号。</p></div></div>
           <label className="source-search">⌕<input value={sourceQuery} onChange={(e) => setSourceQuery(e.target.value)} placeholder="搜索数据源…" /></label>
           <div className="source-summary"><div><b>{sources.length}</b><span>数据源总数</span></div><div><b>{sources.filter((source) => !disabledSources.includes(source.name)).length}</b><span>已启用数据源</span></div><div><b>{sources.filter((s) => s.ok).length}</b><span>在线数据源</span></div></div>
