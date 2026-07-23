@@ -132,10 +132,22 @@ export default function Home() {
   };
   const openStory = (story: Story) => {
     setSelected(story); setArticleDetail(null); setArticleLoading(true);
-    void fetch("/api/article", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: story.url, title: story.title, summary: story.summary }),
-    }).then((response) => response.json()).then((data: ArticleDetail) => setArticleDetail(data))
+    void fetch(`/api/article?url=${encodeURIComponent(story.url)}`)
+      .then((response) => {
+        if (!response.ok) throw new Error("原文读取失败");
+        return response.json();
+      }).then((data: {
+        title?: string; description?: string; publishedAt?: string;
+        images?: Array<{ url: string }>; aiSummary?: { overview?: string; keyPoints?: string[] };
+      }) => setArticleDetail({
+        title: data.title || story.title,
+        description: data.description || story.summary,
+        imageUrl: data.images?.[0]?.url || story.imageUrl,
+        publishedAt: data.publishedAt || story.publishedAt,
+        siteName: story.source,
+        aiSummary: data.aiSummary?.overview || data.description || story.summary,
+        keyPoints: data.aiSummary?.keyPoints || [],
+      }))
       .catch(() => setArticleDetail(null)).finally(() => setArticleLoading(false));
   };
   const ask = async (prompt = question) => {
