@@ -136,11 +136,30 @@ const field = (block: string, tag: string) => block.match(new RegExp(`<${tag}(?:
 const linkFor = (block: string, atom: boolean) => atom
   ? block.match(/<link[^>]+href=["']([^"']+)["']/i)?.[1] ?? ""
   : decode(field(block, "link"));
-const short = (value: string, max = 190) => {
-  const text = decode(value);
-  if (text.length <= max) return text || "点击查看这条资讯的完整内容。";
-  const cut = text.slice(0, max);
-  return `${cut.slice(0, Math.max(cut.lastIndexOf("。"), cut.lastIndexOf("，"), 120))}…`;
+const completeSentence = (value: string) => /[。！？.!?]$/.test(value) ? value : `${value}。`;
+const short = (value: string, max = 150) => {
+  const text = decode(value)
+    .replace(/^[·•\-–—\s]+/, "")
+    .replace(/#\S+/g, "")
+    .replace(/欢迎关注[\s\S]*$/i, "")
+    .replace(/(?:微信公众号|微信号|更多精彩内容)[\s\S]*$/i, "")
+    .replace(/\s+/g, " ").trim();
+  if (!text) return "这条资讯提供了新的 AI 行业动态，点击可查看完整原文。";
+  const sentences = text.match(/[^。！？.!?]+[。！？.!?]/g)?.map((item) => item.trim()).filter((item) => item.length >= 12) ?? [];
+  const selected = sentences.slice(0, 2).join("");
+  if (selected && selected.length <= max + 30) return selected;
+  const candidate = selected || text;
+  if (candidate.length <= max) return completeSentence(candidate);
+  const cut = candidate.slice(0, max);
+  const boundary = Math.max(cut.lastIndexOf("。"), cut.lastIndexOf("！"), cut.lastIndexOf("？"), cut.lastIndexOf("；"), cut.lastIndexOf("，"));
+  return completeSentence(cut.slice(0, boundary >= 70 ? boundary : max).replace(/[，；、\s]+$/, ""));
+};
+const cleanTitle = (value: string) => {
+  const text = decode(value).replace(/\s+/g, " ").trim();
+  if (text.length > 65 && (text.match(/[\/｜|]/g)?.length ?? 0) >= 2) {
+    return text.split(/[\/]/)[0].trim();
+  }
+  return text.length > 88 ? `${text.slice(0, 86).replace(/[，、；:\s]+$/, "")}…` : text;
 };
 const isAi = (text: string) => /人工智能|大模型|模型|智能体|机器人|算法|芯片|\bai\b|gpt|claude|gemini|deepseek|llm|agent/i.test(text);
 const categoryFor = (text: string) => /agent|智能体|copilot/i.test(text) ? "AI Agent"
@@ -169,7 +188,7 @@ async function fetchSource(source: Source): Promise<NewsItem[]> {
     const atom = source.type === "atom";
     const blocks = xml.match(atom ? /<entry\b[\s\S]*?<\/entry>/gi : /<item\b[\s\S]*?<\/item>/gi) ?? [];
     return blocks.slice(0, 18).map((block, index) => {
-      const title = decode(field(block, "title"));
+      const title = cleanTitle(field(block, "title"));
       const summary = short(field(block, atom ? "summary" : "description") || field(block, "content:encoded"));
       const text = `${title} ${summary}`;
       const publishedAt = decode(field(block, atom ? "published" : "pubDate") || field(block, "updated")) || new Date().toISOString();
