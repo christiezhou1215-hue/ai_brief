@@ -385,7 +385,7 @@ export default function Home() {
         </section>}
 
         {active === "数据源" && <section className="sources-page reveal">
-          <div className="page-intro"><div><span className="eyebrow">SOURCE INTELLIGENCE</span><h1>数据源网络</h1><p>中文资讯优先，同时保留全球实验室、学术与科技媒体的一手信号。</p></div></div>
+          <div className="page-intro"><div><span className="eyebrow">SOURCE INTELLIGENCE</span><h1>数据源网络</h1><p>连接全球实验室、学术机构与科技媒体，持续汇集可靠的一手信号。</p></div></div>
           <label className="source-search">⌕<input value={sourceQuery} onChange={(e) => setSourceQuery(e.target.value)} placeholder="搜索数据源…" /></label>
           <div className="source-summary"><div><b>{sources.length}</b><span>数据源总数</span></div><div><b>{sources.filter((source) => !disabledSources.includes(source.name)).length}</b><span>已启用数据源</span></div><div><b>{sources.filter((s) => s.ok).length}</b><span>在线数据源</span></div></div>
           <div className="source-category-tabs">{sourceCategories.map((item) => {
