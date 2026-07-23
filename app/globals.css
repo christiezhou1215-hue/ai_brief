@@ -475,3 +475,28 @@ body{background:
   .filter-group button{font-size:10px}
   .story-body p,.lead .story-body p{font-size:12px}
 }
+
+/* Calendar identity and stronger research-source switch */
+.intro-heading{align-items:stretch}
+.intro-copy{min-height:92px;display:flex;flex-direction:column;justify-content:center}
+.calendar-date{width:178px;height:92px;padding:0;border-radius:18px;gap:0;display:grid;grid-template-columns:46px 58px 1fr;align-items:center;overflow:hidden;background:linear-gradient(145deg,#fff,#f8fbf9);box-shadow:0 12px 30px rgba(25,55,46,.065)}
+.calendar-date .calendar-month{height:100%;display:grid;place-items:center;background:#eaf4ef;color:#17644d;font-size:11px;letter-spacing:.4px;writing-mode:vertical-rl;text-orientation:mixed}
+.calendar-date>strong{font-family:"Noto Serif SC",serif;font-size:34px;line-height:1;color:var(--green);text-align:center}
+.calendar-date .calendar-meta{height:46px;border-left:1px solid #dfe8e4;padding-left:12px;display:flex;flex-direction:column;justify-content:center;color:#334b42;text-transform:none}
+.calendar-date .calendar-meta b{font-size:11px;line-height:1.2}
+.calendar-date .calendar-meta small{font-size:9px;margin:6px 0 0;color:#84928c}
+.composer-source-switch{min-width:158px;height:34px;justify-content:flex-start;padding:0 13px 0 8px;gap:9px;font-size:11px;font-weight:850;letter-spacing:.05px}
+.composer-source-switch>i{width:31px;height:18px;padding:2px}
+.composer-source-switch>i:after{width:14px;height:14px}
+.composer-source-switch.on>i:after{transform:translateX(13px)}
+
+@media(max-width:720px){
+  .intro-copy{min-height:72px}
+  .calendar-date{width:116px;height:72px;grid-template-columns:30px 43px 1fr;border-radius:14px}
+  .calendar-date .calendar-month{font-size:9px}
+  .calendar-date>strong{font-size:25px}
+  .calendar-date .calendar-meta{height:38px;padding-left:8px}
+  .calendar-date .calendar-meta b{font-size:9px}
+  .calendar-date .calendar-meta small{font-size:8px;margin-top:4px}
+  .composer-source-switch{min-width:142px}
+}
