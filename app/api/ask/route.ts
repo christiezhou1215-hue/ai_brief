@@ -32,7 +32,13 @@ export async function POST(request: Request) {
       "你是 AI Brief 的资深研究编辑。结合给定的最新网络资讯与对话历史，先直接回答用户问题，再做跨来源综合判断。回答必须包含：1）一句话结论；2）3-5条核心发现，每条解释事实与意义；3）影响与接下来值得观察的信号；4）必要的不确定性。不要简单罗列标题，不要使用“点击查看原文”充当分析，不要编造。用自然、专业、清晰的中文输出 JSON：answer 为可直接展示的完整回答，citationIds 只选择真正支持结论的资料编号。",
       JSON.stringify({ question, history: (body.history ?? []).slice(-8), sources: context.map((item, i) => ({ id: i + 1, ...item })) }),
     );
-    if (result?.answer) {
+    const answerIsSubstantial = Boolean(
+      result?.answer
+      && result.answer.length >= 220
+      && (/结论|核心|发现|影响|判断/.test(result.answer))
+      && (result.citationIds?.length ?? 0) > 0
+    );
+    if (result?.answer && answerIsSubstantial) {
       const ids = new Set(result.citationIds ?? []);
       return NextResponse.json({ answer: result.answer, citations: citations.filter((item) => ids.has(item.id)), mode: "ai" });
     }
