@@ -153,7 +153,7 @@ const normalize = (title: string) => title.toLowerCase()
   .replace(/(?:最新|重磅|突发|官宣|独家|刚刚)/g, "").replace(/\s*[-—_|]\s*[^-—_|]{1,30}$/g, "")
   .replace(/[^a-z0-9\u4e00-\u9fff]/g, "").slice(0, 54);
 
-let memoryCache: { at: number; payload: unknown } | null = null;
+const memoryCache = new Map<string, { at: number; payload: unknown }>();
 
 async function fetchSource(source: Source): Promise<NewsItem[]> {
   const controller = new AbortController();
@@ -191,11 +191,15 @@ async function fetchSource(source: Source): Promise<NewsItem[]> {
 export async function GET(request: Request) {
   const query = new URL(request.url).searchParams;
   const requested = query.get("source");
-  if (!requested && memoryCache && Date.now() - memoryCache.at < 15 * 60_000) {
-    return NextResponse.json(memoryCache.payload, { headers: { "X-AI-Brief-Cache": "HIT" } });
+  const disabled = new Set((query.get("disabled") ?? "").split("|").filter(Boolean));
+  const cacheKey = requested ? `source:${requested}` : `disabled:${[...disabled].sort().join("|")}`;
+  const cached = memoryCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < 15 * 60_000) {
+    return NextResponse.json(cached.payload, { headers: { "X-AI-Brief-Cache": "HIT" } });
   }
-  const active = requested ? sources.filter((source) => source.name === requested) : sources;
-  if (!active.length) return NextResponse.json({ error: "Unknown source" }, { status: 400 });
+  const visibleSources = requested ? sources.filter((source) => source.name === requested) : sources;
+  const active = visibleSources.filter((source) => !disabled.has(source.name));
+  if (!active.length && requested) return NextResponse.json({ error: "Unknown source" }, { status: 400 });
   const results = await Promise.allSettled(active.map(fetchSource));
   const groups = new Map<string, NewsItem>();
   results.forEach((result) => {
@@ -212,15 +216,22 @@ export async function GET(request: Request) {
     });
   });
   const items = [...groups.values()].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 420);
-  const statuses = active.map((source, index) => ({
-    name: source.name, mark: source.mark, homepage: source.homepage ?? new URL(source.url).origin, type: source.type ?? "rss",
-    chinese: Boolean(source.chinese), trustScore: source.tier === 1 ? 88 : source.tier === 2 ? 74 : 61,
-    ok: results[index]?.status === "fulfilled", itemCount: results[index]?.status === "fulfilled" ? results[index].value.length : 0,
-  }));
+  const statuses = visibleSources.map((source) => {
+    const index = active.findIndex((item) => item.name === source.name);
+    const enabled = index >= 0;
+    return {
+      name: source.name, mark: source.mark, homepage: source.homepage ?? new URL(source.url).origin, type: source.type ?? "rss",
+      chinese: Boolean(source.chinese), trustScore: source.tier === 1 ? 88 : source.tier === 2 ? 74 : 61, enabled,
+      ok: enabled && results[index]?.status === "fulfilled", itemCount: enabled && results[index]?.status === "fulfilled" ? results[index].value.length : 0,
+    };
+  });
   const payload = {
     items, sources: statuses, updatedAt: new Date().toISOString(),
     healthySources: statuses.filter((item) => item.ok).length, totalSources: statuses.length,
   };
-  if (!requested && items.length) memoryCache = { at: Date.now(), payload };
+  if (items.length) {
+    memoryCache.set(cacheKey, { at: Date.now(), payload });
+    if (memoryCache.size > 20) memoryCache.delete(memoryCache.keys().next().value ?? "");
+  }
   return NextResponse.json(payload, { headers: { "Cache-Control": "public, s-maxage=900, stale-while-revalidate=86400" } });
 }
