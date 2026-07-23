@@ -247,7 +247,7 @@ export default function Home() {
   return <main className={`app-shell ${sidebarCollapsed ? "nav-collapsed" : ""}`}>
     <aside className="sidebar">
       <button className="brand" onClick={() => setActive("今日资讯")} aria-label="返回首页">
-        <span className="brand-mark"><b>AI</b><i /></span>
+        <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
         <span>AI Brief</span>
       </button>
       <p className="nav-label">探索</p>
@@ -278,7 +278,7 @@ export default function Home() {
           <section className="page-intro reveal">
             <div><span className="eyebrow">AI SIGNAL DESK · {new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(new Date())}</span>
               <h1>{active === "我的收藏" ? "我的收藏" : "今日资讯"}</h1>
-              <p>{active === "我的收藏" ? "你保存的高价值内容，随时回来继续阅读。" : "从海量动态中提炼值得关注、值得相信、值得行动的信号。"}</p>
+              <p>{active === "我的收藏" ? "你保存的高价值内容，随时回来继续阅读。" : "从海量动态中提炼值得关注、值得相信、值得行动的事件。"}</p>
             </div>
             <div className="live-status"><span /><b>{loading ? "正在建立实时连接" : "实时更新"}</b><small>{updatedAt ? `最近同步 ${formatDate(updatedAt)}` : "准备同步"}</small></div>
           </section>
