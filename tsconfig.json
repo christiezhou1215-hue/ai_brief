@@ -38,13 +38,6 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules",
-    "db/**",
-    "worker/**",
-    "examples/**",
-    "scripts/**",
-    "drizzle.config.ts",
-    "vite.config.ts",
-    "wrangler.jsonc"
+    "node_modules"
   ]
 }
