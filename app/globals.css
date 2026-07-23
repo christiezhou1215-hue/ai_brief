@@ -74,3 +74,23 @@
 .answer-content p{margin:0}
 .answer-content .answer-point{position:relative;padding:9px 11px 9px 28px;border-radius:9px;background:#f5f8f6}
 .answer-content .answer-point:before{content:"";position:absolute;left:12px;top:15px;width:6px;height:6px;border-radius:50%;background:#3c9a77}
+
+/* Topic subscriptions and motion polish */
+.topic-subscriptions{display:flex;align-items:center;gap:18px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px 15px;box-shadow:0 7px 22px rgba(25,55,46,.035)}
+.topic-subscriptions>div:first-child{flex:0 0 180px}
+.topic-subscriptions>div:first-child span,.topic-subscriptions>div:first-child small{display:block}
+.topic-subscriptions>div:first-child span{font-size:10px;font-weight:800;color:#243a32}
+.topic-subscriptions>div:first-child small{font-size:8px;color:#89958f;line-height:1.5;margin-top:4px}
+.topic-chips{display:flex;flex-wrap:wrap;gap:7px}
+.topic-chips button{height:29px;border:1px solid #dce5e1;background:#f8faf9;color:#68756f;border-radius:999px;padding:0 10px;font-size:8px;font-weight:700;transition:.2s cubic-bezier(.2,.8,.2,1)}
+.topic-chips button:hover{border-color:#91b7a7;color:var(--green);transform:translateY(-2px)}
+.topic-chips button.active{background:#e8f4ef;border-color:#bddbce;color:var(--green);box-shadow:0 4px 11px rgba(18,99,76,.08)}
+.topic-chips i{display:inline-grid;place-items:center;width:14px;height:14px;margin-right:5px;border-radius:50%;background:#e8eeeb;font-style:normal;font-size:8px}
+.topic-chips button.active i{background:var(--green);color:#fff;animation:topicPop .28s ease}
+.story-head .save{margin-left:auto}
+.story-grid .story-card:nth-child(2){animation-delay:35ms}.story-grid .story-card:nth-child(3){animation-delay:70ms}.story-grid .story-card:nth-child(4){animation-delay:105ms}.story-grid .story-card:nth-child(5){animation-delay:140ms}.story-grid .story-card:nth-child(6){animation-delay:175ms}
+.source-tag{animation:cardIn .42s ease both}.source-tag:nth-child(2n){animation-delay:35ms}.source-tag:nth-child(3n){animation-delay:70ms}
+.page-language button,.source-toggle,.collapse-nav,.refresh,.pagination button{transition:.2s cubic-bezier(.2,.8,.2,1)}
+.page-language button:active,.source-toggle:active,.refresh:active{transform:scale(.96)}
+@keyframes topicPop{0%{transform:scale(.55)}70%{transform:scale(1.15)}100%{transform:scale(1)}}
+@media(max-width:850px){.topic-subscriptions{align-items:flex-start;flex-direction:column}.topic-subscriptions>div:first-child{flex-basis:auto}}
