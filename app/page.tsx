@@ -45,7 +45,7 @@ const sourceCategories = ["全部来源", "中文科技媒体", "官方与实验
 const topicOptions = ["模型发布", "AI Agent", "AI 编程", "中国 AI", "融资", "多模态", "开源项目"];
 const matchesTopic = (story: Story, topic: string) => {
   const text = `${story.title} ${story.summary} ${story.category} ${story.tags.join(" ")}`.toLowerCase();
-  if (topic === "中国 AI") return story.tags.includes("中文") || /中国|国产|北京|上海|深圳|杭州|deepseek|智谱|通义|千问|文心|豆包/.test(text);
+  if (topic === "中国 AI") return story.tags.includes("中文") || /中国|国产|北京|上海|深圳|杭州|deepseek|智谱|通义|文心|豆包/.test(text);
   if (topic === "融资") return /融资|投资|估值|收购|ipo|funding|investment|valuation|acquisition/.test(text);
   if (topic === "开源项目") return story.category === "开源项目" || /开源|open.?source|github/.test(text);
   return story.category === topic || text.includes(topic.toLowerCase());
@@ -288,7 +288,7 @@ export default function Home() {
   return <main className={`app-shell ${sidebarCollapsed ? "nav-collapsed" : ""}`}>
     <aside className="sidebar">
       <button className="brand" onClick={() => setActive("今日资讯")} aria-label="返回首页">
-        <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
+        <span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M10 28 19.3 9.5a1 1 0 0 1 1.8 0L30 28" /><path d="M14.5 21.5h11" /><circle cx="29.5" cy="10.5" r="2.3" /></svg></span>
         <span>AI Brief</span>
       </button>
       <p className="nav-label">探索</p>
@@ -401,10 +401,17 @@ export default function Home() {
               <div className="source-tag-head"><span className="source-mark">{source.mark}</span><div><b>{source.name}</b><small>{sourceCategory(source)}</small></div>
                 <button className={`source-toggle ${enabled ? "on" : ""}`} onClick={() => toggleSource(source.name)} role="switch" aria-checked={enabled} aria-label={`${enabled ? "停用" : "启用"} ${source.name}`}><i /></button>
               </div>
+              <div className="source-tags"><span>{source.chinese ? "中文内容" : "国际来源"}</span><span>{source.type === "atom" ? "Atom" : "RSS / 聚合"}</span><span>{enabled ? "已启用" : "已停用"}</span></div>
               <div className="source-tag-meta"><span className={`health ${source.ok ? "ok" : ""}`}>{source.ok ? "在线" : "暂时不可用"}</span><span>{source.itemCount} 条内容</span><a href={source.homepage} target="_blank" rel="noreferrer">访问来源 ↗</a></div>
             </article>;
           })}</div>
         </section>}
+        <footer className="site-footer">
+          <div className="footer-orbit"><i /><i /><i /><span>✦</span></div>
+          <div><b>AI Brief</b><p>持续连接全球 AI 信号，由 DeepSeek 提炼为清晰、可核查的洞察。</p></div>
+          <div className="footer-wave" aria-hidden="true">{Array.from({ length: 14 }).map((_, index) => <i key={index} />)}</div>
+          <span className="footer-meta">130 SOURCES · LIVE INTELLIGENCE</span>
+        </footer>
       </div>
     </section>
 
