@@ -342,12 +342,6 @@ body{background:
 
 /* Research follow-ups, focus mode and final motion polish */
 .result-actions{display:flex;align-items:center;gap:9px}
-.focus-important{height:35px;border:1px solid #d6e2dd;border-radius:10px;background:#fff;color:#65746e;padding:0 12px;font-size:8px;font-weight:800;letter-spacing:.15px;display:inline-flex;align-items:center;gap:7px;transition:.25s cubic-bezier(.2,.8,.2,1)}
-.focus-important i{width:17px;height:17px;border-radius:6px;background:#edf4f1;color:var(--green);display:grid;place-items:center;font-size:9px;font-style:normal;transition:.25s cubic-bezier(.2,1.4,.3,1)}
-.focus-important:hover{color:var(--green);border-color:#9bbdaf;background:#f7fbf9;transform:translateY(-2px);box-shadow:0 8px 20px rgba(18,99,76,.07)}
-.focus-important:hover i{transform:rotate(-5deg) scale(1.08)}
-.focus-important.active{color:#fff;background:var(--green);border-color:var(--green);box-shadow:0 8px 20px rgba(18,99,76,.17)}
-.focus-important.active i{color:var(--green);background:#fff;animation:focusPing 1.8s ease-in-out infinite}
 .follow-ups{margin-top:18px;padding-top:15px;border-top:1px solid #e4ebe8;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .follow-ups>span{grid-column:1/-1;font-size:7px;font-weight:850;letter-spacing:1.15px;color:#799087;text-transform:uppercase}
 .follow-ups button{min-height:48px;border:1px solid #dce6e2;border-radius:11px;background:linear-gradient(145deg,#fbfdfc,#f4f8f6);color:#344b42;padding:9px 11px;text-align:left;font-size:8px;font-weight:700;line-height:1.5;display:flex;align-items:flex-start;gap:7px;animation:followUpIn .42s cubic-bezier(.2,.8,.2,1) both;transition:.25s cubic-bezier(.2,.8,.2,1)}
@@ -363,9 +357,8 @@ body{background:
 .source-pagination button:not(:disabled):active{transform:scale(.92)}
 .source-pagination button.active{animation:pageSelect .34s cubic-bezier(.2,1.45,.3,1)}
 @keyframes followUpIn{from{opacity:0;transform:translateY(9px) scale(.985)}to{opacity:1;transform:none}}
-@keyframes focusPing{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.2)}50%{box-shadow:0 0 0 5px rgba(255,255,255,0)}}
 @keyframes pageSelect{0%{transform:scale(.8)}70%{transform:scale(1.08)}100%{transform:none}}
-@media(max-width:820px){.result-actions{width:100%;justify-content:space-between}.follow-ups{grid-template-columns:1fr}.follow-ups>span{grid-column:auto}.focus-important{padding:0 9px}}
+@media(max-width:820px){.result-actions{width:100%;justify-content:flex-end}.follow-ups{grid-template-columns:1fr}.follow-ups>span{grid-column:auto}}
 
 /* Compact information architecture */
 .topbar{height:84px;padding:0 31px;gap:14px}
