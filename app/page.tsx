@@ -42,6 +42,15 @@ const sourceCategory = (source: SourceStatus) => {
   return source.chinese ? "中文科技媒体" : "国际科技媒体";
 };
 const sourceCategories = ["全部来源", "中文科技媒体", "官方与实验室", "学术研究", "开发者社区", "国际科技媒体"];
+const AnswerContent = ({ content }: { content: string }) => <div className="answer-content">
+  {content.split("\n").map((line, index) => {
+    const text = line.trim();
+    if (!text) return null;
+    if (/^(结论|核心发现|核心要点|综合判断|影响|接下来值得关注|不确定性|来源)$/.test(text)) return <h4 key={index}>{text}</h4>;
+    if (/^(?:\d+[.、]|[-•])\s*/.test(text)) return <p className="answer-point" key={index}>{text.replace(/^(?:\d+[.、]|[-•])\s*/, "")}</p>;
+    return <p key={index}>{text}</p>;
+  })}
+</div>;
 
 export default function Home() {
   const [active, setActive] = useState("今日资讯");
@@ -51,6 +60,7 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [updatedAt, setUpdatedAt] = useState("");
+  const [aiInsight, setAiInsight] = useState("");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("全部分类");
   const [importance, setImportance] = useState("全部级别");
@@ -71,13 +81,15 @@ export default function Home() {
   const [disabledSources, setDisabledSources] = useState<string[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const loadNews = useCallback(async (manual = false) => {
+  const loadNews = useCallback(async (manual = false, disabledOverride?: string[]) => {
     if (manual) setRefreshing(true); else setLoading(true);
     setError("");
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 8_000);
     try {
-      const response = await fetch("/api/news", { signal: controller.signal, cache: manual ? "no-store" : "default" });
+      const disabled = disabledOverride ?? JSON.parse(window.localStorage.getItem("ai-brief-disabled-sources") || "[]") as string[];
+      const params = disabled.length ? `?disabled=${encodeURIComponent(disabled.join("|"))}` : "";
+      const response = await fetch(`/api/news${params}`, { signal: controller.signal, cache: manual ? "no-store" : "default" });
       if (!response.ok) throw new Error("资讯接口暂时不可用");
       const data = await response.json() as { items: Story[]; sources: SourceStatus[]; updatedAt: string };
       setStories(data.items ?? []); setSources(data.sources ?? []); setUpdatedAt(data.updatedAt);
@@ -98,11 +110,15 @@ export default function Home() {
     const stored = window.localStorage.getItem("ai-brief-saved");
     if (stored) setSaved(JSON.parse(stored));
     const disabled = window.localStorage.getItem("ai-brief-disabled-sources");
-    if (disabled) setDisabledSources(JSON.parse(disabled));
-    void loadNews();
+    const disabledList = disabled ? JSON.parse(disabled) as string[] : [];
+    setDisabledSources(disabledList);
+    const cachedTranslations = window.localStorage.getItem("ai-brief-translations");
+    if (cachedTranslations) setTranslations(JSON.parse(cachedTranslations));
+    void loadNews(false, disabledList);
   }, [loadNews]);
   useEffect(() => { window.localStorage.setItem("ai-brief-saved", JSON.stringify(saved)); }, [saved]);
   useEffect(() => { window.localStorage.setItem("ai-brief-disabled-sources", JSON.stringify(disabledSources)); }, [disabledSources]);
+  useEffect(() => { window.localStorage.setItem("ai-brief-translations", JSON.stringify(translations)); }, [translations]);
 
   const filtered = useMemo(() => {
     const result = stories.filter((story) => {
@@ -126,7 +142,11 @@ export default function Home() {
   useEffect(() => setPage(1), [query, category, importance, active, sort]);
 
   const toggleSaved = (id: string) => setSaved((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id]);
-  const toggleSource = (name: string) => setDisabledSources((items) => items.includes(name) ? items.filter((item) => item !== name) : [...items, name]);
+  const toggleSource = (name: string) => {
+    const next = disabledSources.includes(name) ? disabledSources.filter((item) => item !== name) : [...disabledSources, name];
+    setDisabledSources(next);
+    void loadNews(true, next);
+  };
   const displayed = (story: Story) => {
     const originalMatches = contentLanguage === "en" ? isEnglish(story) : !isEnglish(story);
     const translated = translations[story.id];
@@ -172,17 +192,30 @@ export default function Home() {
   const insight = topStories.length
     ? `今天的 AI 资讯主要集中在${categories.slice(0, 2).join("与")}。${topStories[0].source}等一手来源持续释放新的产品、模型与行业信号。${topStories.some((item) => item.related >= 3) ? "部分关键事件已获得三个以上独立来源交叉印证，市场关注度正在上升。" : "部分新动态仍处于早期披露阶段，需要结合后续进展持续观察。"}整体趋势显示，AI 正从模型能力竞争进一步走向产品落地、开发工具和行业应用。`
     : "正在整理今天的核心趋势。系统会从最新资讯中提炼模型、产品与行业变化。关键事件将结合多来源信息交叉判断。请稍候片刻。";
+  const dailyInsight = aiInsight || insight;
+  const insightTranslationKey = `__insight:${dailyInsight}`;
+  useEffect(() => {
+    if (!stories.length) return;
+    const controller = new AbortController();
+    void fetch("/api/summary", {
+      method: "POST", signal: controller.signal, headers: { "content-type": "application/json" },
+      body: JSON.stringify({ stories: stories.slice(0, 36) }),
+    }).then((response) => response.json()).then((data: { summary?: string }) => {
+      if (data.summary) setAiInsight(data.summary);
+    }).catch(() => undefined);
+    return () => controller.abort();
+  }, [stories]);
   useEffect(() => {
     if (loading || pageTranslating || !paged.length) return;
     const candidates = [...new Map([...paged, ...topStories].map((story) => [story.id, story])).values()]
       .filter((story) => contentLanguage === "zh" ? isEnglish(story) : !isEnglish(story))
       .filter((story) => translations[story.id]?.target !== contentLanguage);
-    const needsInsight = contentLanguage === "en" && translations.__insight?.target !== "en";
+    const needsInsight = contentLanguage === "en" && translations[insightTranslationKey]?.target !== "en";
     if (!candidates.length && !needsInsight) return;
     setPageTranslating(true);
     const items = [
       ...candidates.map((story) => ({ id: story.id, title: story.title, summary: story.summary })),
-      ...(needsInsight ? [{ id: "__insight", title: "今日 AI 总结", summary: insight }] : []),
+      ...(needsInsight ? [{ id: insightTranslationKey, title: "今日 AI 总结", summary: dailyInsight }] : []),
     ];
     void fetch("/api/translate", {
       method: "POST", headers: { "content-type": "application/json" },
@@ -195,7 +228,7 @@ export default function Home() {
         return next;
       });
     }).finally(() => setPageTranslating(false));
-  }, [active, contentLanguage, insight, loading, page, pageTranslating, paged, topStories, translations]);
+  }, [active, contentLanguage, dailyInsight, insightTranslationKey, loading, page, pageTranslating, paged, topStories, translations]);
 
   return <main className={`app-shell ${sidebarCollapsed ? "nav-collapsed" : ""}`}>
     <aside className="sidebar">
@@ -237,7 +270,7 @@ export default function Home() {
           </section>
 
           {active === "今日资讯" && <section className="brief-hero reveal delay-1">
-            <div className="brief-copy"><span className="hero-kicker">✦ AI 总结</span><h2>{loading ? "快速读取多个可靠信号源…" : contentLanguage === "en" ? translations.__insight?.summary ?? insight : insight}</h2></div>
+            <div className="brief-copy"><span className="hero-kicker">✦ AI 总结</span><h2>{loading ? "快速读取多个可靠信号源…" : contentLanguage === "en" ? translations[insightTranslationKey]?.summary ?? dailyInsight : dailyInsight}</h2></div>
             <div className="trend-stack">
               <span className="trend-title">今日核心趋势</span>
               {topStories.slice(0, 3).map((story, i) => <button key={story.id} onClick={() => openStory(story)}><em>0{i + 1}</em><span>{displayed(story).title}</span><b>↗</b></button>)}
@@ -284,7 +317,7 @@ export default function Home() {
           <div className="ask-header"><span className="ask-orb">✦</span><span className="eyebrow">AI BRIEF RESEARCH ASSISTANT</span><h1>从资讯中，找到答案。</h1><p>基于当前抓取的新闻、历史上下文与多来源信号进行回答，并附上可核查的出处。</p></div>
           {!messages.length && <div className="suggestions">{["今天最重要的 AI 变化是什么？","最近有哪些新模型发布？","哪些新闻得到了多个来源印证？","总结中国 AI 行业近期趋势"].map((item) => <button key={item} onClick={() => void ask(item)}><span>↗</span>{item}</button>)}</div>}
           <div className="chat-stream">{messages.map((message, index) => <div className={`message ${message.role}`} key={index}>
-            <span className="avatar">{message.role === "user" ? "你" : "✦"}</span><div><p>{message.content}</p>
+            <span className="avatar">{message.role === "user" ? "你" : "✦"}</span><div>{message.role === "assistant" ? <AnswerContent content={message.content} /> : <p>{message.content}</p>}
               {message.citations?.length ? <div className="citations">{message.citations.map((citation) => <a key={citation.url} href={citation.url} target="_blank" rel="noreferrer"><b>{citation.source}</b><span>{citation.title}</span>↗</a>)}</div> : null}
             </div></div>)}{asking && <div className="message assistant"><span className="avatar">✦</span><div className="thinking"><i /><i /><i /></div></div>}</div>
           <div className="ask-composer"><textarea value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(); } }} placeholder="问任何关于 AI 行业、产品、模型或趋势的问题…" /><div><span>回答将优先引用当前资讯 · Enter 发送</span><button onClick={() => void ask()} disabled={!question.trim() || asking}>发送 <b>↑</b></button></div></div>
@@ -319,7 +352,7 @@ export default function Home() {
       <div className="drawer-content">
         <div className="drawer-source"><span className="source-mark">{selected.sourceMark}</span><div><b>{selected.source}</b><small>{formatDate(selected.publishedAt)}</small></div><span className={`trust ${selected.trustLabel}`}>● {selected.trustLabel} {selected.trustScore}</span></div>
         <div className="story-badges"><span>{selected.category}</span><span className={`level ${selected.level}`}>{selected.level}</span></div>
-        {(articleDetail?.imageUrl || selected.imageUrl) && <img className="article-image" src={articleDetail?.imageUrl || selected.imageUrl} alt="" />}
+        {(articleDetail?.imageUrl || selected.imageUrl) && <img className="article-image" src={articleDetail?.imageUrl || selected.imageUrl} alt="" onError={(event) => { event.currentTarget.hidden = true; }} />}
         <h2>{displayed(selected).title || articleDetail?.title || selected.title}</h2>
         <div className="original-meta"><span>{articleDetail?.siteName || selected.source}</span>{articleDetail?.author && <span>作者：{articleDetail.author}</span>}<span>{formatDate(articleDetail?.publishedAt || selected.publishedAt)}</span></div>
         <section className="drawer-section ai-summary"><span>AI 总结摘要</span>
