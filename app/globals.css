@@ -27,3 +27,11 @@
 .ask-composer{position:sticky;bottom:0;z-index:3}
 .message.assistant>div{box-shadow:0 8px 24px rgba(25,55,46,.04)}
 @media(max-width:720px){.source-summary{grid-template-columns:1fr 1fr}.translate-btn{margin-left:auto}.story-head .trust{display:none}.ask-page{height:auto;min-height:calc(100vh - 145px)}}
+
+/* Refined wordmark */
+.brand{gap:11px}
+.brand-mark{width:38px;height:38px;border-radius:50%;overflow:visible;background:#fff;border:1px solid #cbdad4;box-shadow:0 6px 18px rgba(18,70,55,.08)}
+.brand-mark b{font-family:"DM Sans","Noto Sans SC",sans-serif;font-size:12px;font-weight:800;letter-spacing:-1px;color:var(--green);transform:none}
+.brand-mark i:first-of-type{width:8px;height:8px;left:auto;right:-2px;top:-2px;bottom:auto;border:2px solid #fff;border-radius:50%;background:var(--gold);box-shadow:0 2px 7px rgba(213,161,79,.35);transform:none}
+.brand>span:last-child{font-size:16px;letter-spacing:-.3px}
+.ai-summary li strong{font-weight:750;color:#1d2f29}
