@@ -14,7 +14,7 @@ type SourceStatus = {
 };
 type ChatMessage = { role: "user" | "assistant"; content: string; citations?: Array<{ title: string; source: string; url: string }> };
 type Translation = { title: string; summary: string; target: "zh" | "en" };
-type ArticleDetail = { title: string; description: string; imageUrl?: string; siteName?: string; author?: string; publishedAt?: string; aiSummary: string; keyPoints: string[] };
+type ArticleDetail = { title: string; description: string; imageUrl?: string; siteName?: string; author?: string; publishedAt?: string; aiSummary: string; keyPoints: string[]; paragraphs: string[] };
 
 const nav = [
   { icon: "✦", label: "今日资讯" },
@@ -48,7 +48,7 @@ const matchesTopic = (story: Story, topic: string) => {
   if (topic === "中国 AI") return story.tags.includes("中文") || /中国|国产|北京|上海|深圳|杭州|deepseek|智谱|通义|千问|文心|豆包/.test(text);
   if (topic === "融资") return /融资|投资|估值|收购|ipo|funding|investment|valuation|acquisition/.test(text);
   if (topic === "开源项目") return story.category === "开源项目" || /开源|open.?source|github/.test(text);
-  return story.category === topic;
+  return story.category === topic || text.includes(topic.toLowerCase());
 };
 const AnswerContent = ({ content }: { content: string }) => <div className="answer-content">
   {content.split("\n").map((line, index) => {
@@ -70,7 +70,6 @@ export default function Home() {
   const [updatedAt, setUpdatedAt] = useState("");
   const [aiInsight, setAiInsight] = useState("");
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("全部分类");
   const [importance, setImportance] = useState("全部级别");
   const [sort, setSort] = useState("综合排序");
   const [saved, setSaved] = useState<string[]>([]);
@@ -88,6 +87,9 @@ export default function Home() {
   const [sourceFilter, setSourceFilter] = useState("全部来源");
   const [disabledSources, setDisabledSources] = useState<string[]>([]);
   const [subscribedTopics, setSubscribedTopics] = useState<string[]>([]);
+  const [customTopics, setCustomTopics] = useState<string[]>(topicOptions);
+  const [editingTopic, setEditingTopic] = useState<string | null>(null);
+  const [topicDraft, setTopicDraft] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [syncStage, setSyncStage] = useState("连接数据源");
   const [askStage, setAskStage] = useState("读取实时资讯");
@@ -128,12 +130,15 @@ export default function Home() {
     if (cachedTranslations) setTranslations(JSON.parse(cachedTranslations));
     const topics = window.localStorage.getItem("ai-brief-topics");
     if (topics) setSubscribedTopics(JSON.parse(topics));
+    const custom = window.localStorage.getItem("ai-brief-custom-topics");
+    if (custom) setCustomTopics(JSON.parse(custom));
     void loadNews(false, disabledList);
   }, [loadNews]);
   useEffect(() => { window.localStorage.setItem("ai-brief-saved", JSON.stringify(saved)); }, [saved]);
   useEffect(() => { window.localStorage.setItem("ai-brief-disabled-sources", JSON.stringify(disabledSources)); }, [disabledSources]);
   useEffect(() => { window.localStorage.setItem("ai-brief-translations", JSON.stringify(translations)); }, [translations]);
   useEffect(() => { window.localStorage.setItem("ai-brief-topics", JSON.stringify(subscribedTopics)); }, [subscribedTopics]);
+  useEffect(() => { window.localStorage.setItem("ai-brief-custom-topics", JSON.stringify(customTopics)); }, [customTopics]);
   useEffect(() => {
     if (!loading && !refreshing) return;
     setSyncStage("连接数据源");
@@ -156,7 +161,6 @@ export default function Home() {
     const result = stories.filter((story) => {
       const text = `${story.title}${story.summary}${story.source}${story.tags.join("")}`.toLowerCase();
       return (!query || text.includes(query.toLowerCase()))
-        && (category === "全部分类" || story.category === category)
         && (importance === "全部级别" || story.level === importance)
         && !disabledSources.includes(story.source)
         && (active !== "我的收藏" || saved.includes(story.id));
@@ -166,13 +170,13 @@ export default function Home() {
       ? new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
       : sort === "多源提及优先" ? b.related - a.related
       : (topicBoost(b) + b.score + b.trustScore * .35 + b.related * 4) - (topicBoost(a) + a.score + a.trustScore * .35 + a.related * 4));
-  }, [stories, query, category, importance, disabledSources, active, saved, sort, subscribedTopics]);
+  }, [stories, query, importance, disabledSources, active, saved, sort, subscribedTopics]);
 
   const topStories = filtered.slice(0, 5);
-  const pageSize = 12;
+  const pageSize = 13;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
-  useEffect(() => setPage(1), [query, category, importance, active, sort]);
+  useEffect(() => setPage(1), [query, importance, active, sort]);
 
   const toggleSaved = (id: string) => setSaved((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id]);
   const toggleSource = (name: string) => {
@@ -181,6 +185,17 @@ export default function Home() {
     void loadNews(true, next);
   };
   const toggleTopic = (topic: string) => setSubscribedTopics((items) => items.includes(topic) ? items.filter((item) => item !== topic) : [...items, topic]);
+  const saveTopic = () => {
+    const nextName = topicDraft.trim().slice(0, 18);
+    if (!nextName) return;
+    if (editingTopic) {
+      setCustomTopics((items) => [...new Set(items.map((item) => item === editingTopic ? nextName : item))]);
+      setSubscribedTopics((items) => [...new Set(items.map((item) => item === editingTopic ? nextName : item))]);
+    } else {
+      setCustomTopics((items) => [...new Set([...items, nextName])]);
+    }
+    setEditingTopic(null); setTopicDraft("");
+  };
   const displayed = (story: Story) => {
     const originalMatches = contentLanguage === "en" ? isEnglish(story) : !isEnglish(story);
     const translated = translations[story.id];
@@ -188,21 +203,27 @@ export default function Home() {
   };
   const openStory = (story: Story) => {
     setSelected(story); setArticleDetail(null); setArticleLoading(true);
-    void fetch(`/api/article?url=${encodeURIComponent(story.url)}`)
+    void fetch("/api/article", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: story.url, title: story.title, summary: story.summary }),
+    })
       .then((response) => {
         if (!response.ok) throw new Error("原文读取失败");
         return response.json();
       }).then((data: {
         title?: string; description?: string; publishedAt?: string;
-        images?: Array<{ url: string }>; aiSummary?: { overview?: string; keyPoints?: string[] };
+        imageUrl?: string; siteName?: string; author?: string; paragraphs?: string[];
+        aiSummary?: string; keyPoints?: string[];
       }) => setArticleDetail({
         title: data.title || story.title,
         description: data.description || story.summary,
-        imageUrl: data.images?.[0]?.url || story.imageUrl,
+        imageUrl: data.imageUrl || story.imageUrl,
         publishedAt: data.publishedAt || story.publishedAt,
-        siteName: story.source,
-        aiSummary: data.aiSummary?.overview || data.description || story.summary,
-        keyPoints: data.aiSummary?.keyPoints || [],
+        siteName: data.siteName || story.source,
+        author: data.author,
+        aiSummary: data.aiSummary || data.description || story.summary,
+        keyPoints: data.keyPoints || [],
+        paragraphs: data.paragraphs || [],
       }))
       .catch(() => setArticleDetail(null)).finally(() => setArticleLoading(false));
   };
@@ -314,12 +335,13 @@ export default function Home() {
           <section className="control-deck reveal delay-2">
             <div className="topic-subscriptions">
               <div><span>关注主题</span><small>{subscribedTopics.length ? `已关注 ${subscribedTopics.length} 个主题，相关资讯将优先展示` : "选择你关心的方向，定制首页信息流"}</small></div>
-              <div className="topic-chips">{topicOptions.map((topic) => <button key={topic} className={subscribedTopics.includes(topic) ? "active" : ""} onClick={() => toggleTopic(topic)}>
-                <i>{subscribedTopics.includes(topic) ? "✓" : "+"}</i>{topic}
-              </button>)}</div>
+              <div className="topic-chips">{customTopics.map((topic) => <span className="topic-chip" key={topic}>
+                <button className={subscribedTopics.includes(topic) ? "active" : ""} onClick={() => toggleTopic(topic)}><i>{subscribedTopics.includes(topic) ? "✓" : "+"}</i>{topic}</button>
+                <button className="edit-topic" onClick={() => { setEditingTopic(topic); setTopicDraft(topic); }} aria-label={`修改${topic}`}>✎</button>
+              </span>)}<button className="add-topic" onClick={() => { setEditingTopic(""); setTopicDraft(""); }}>＋ 添加主题</button></div>
             </div>
+            {editingTopic !== null && <div className="topic-editor"><input autoFocus value={topicDraft} onChange={(event) => setTopicDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveTopic(); }} placeholder="输入主题名称" maxLength={18} /><button onClick={saveTopic}>保存</button><button onClick={() => { setEditingTopic(null); setTopicDraft(""); }}>取消</button></div>}
             <div className="filters">
-              <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="分类"><option>全部分类</option>{["模型发布","AI Agent","AI 编程","多模态","开源项目","学术研究","行业动态"].map((x) => <option key={x}>{x}</option>)}</select>
               <select value={importance} onChange={(e) => setImportance(e.target.value)} aria-label="重要程度"><option>全部级别</option><option>重要</option><option>关注</option><option>一般</option></select>
               <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="排序"><option>综合排序</option><option>时间优先</option><option>多源提及优先</option></select>
             </div>
@@ -338,8 +360,7 @@ export default function Home() {
             : paged.length ? <section className="story-grid editorial">
               {paged.map((story, index) => {
                 const translated = displayed(story);
-                return <article className={`story-card ${index === 0 ? "lead" : ""} ${story.imageUrl ? "has-image" : ""}`} style={{ "--card-order": index } as React.CSSProperties} key={story.id} onClick={() => openStory(story)}>
-                {story.imageUrl && <div className="story-image-wrap"><img src={story.imageUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.parentElement?.remove(); }} /><span>原文配图</span></div>}
+                return <article className={`story-card ${index === 0 ? "lead" : ""}`} style={{ "--card-order": index } as React.CSSProperties} key={story.id} onClick={() => openStory(story)}>
                 <div className="story-head"><span className="source-mark">{story.sourceMark}</span><div><b>{story.source}</b><small>{relative(story.publishedAt)}</small></div>
                   <button className={`save ${saved.includes(story.id) ? "saved" : ""}`} onClick={(e) => { e.stopPropagation(); toggleSaved(story.id); }} aria-label="收藏">{saved.includes(story.id) ? "♥" : "♡"}</button>
                 </div>
@@ -403,7 +424,10 @@ export default function Home() {
           })}</ul>}
         </section>
         {selected.related >= 3 && <section className="evidence-box"><span>多源验证</span><h3>{selected.related} 个独立来源提及此事件</h3><p>{selected.sourceMentions.join("、")}</p></section>}
-        <section className="drawer-section"><span>原文信息</span><p>{articleDetail?.description ?? selected.summary}</p></section>
+        <section className="drawer-section original-content"><span>原文信息</span>
+          <p>{articleDetail?.description ?? selected.summary}</p>
+          {articleDetail?.paragraphs?.slice(0, 6).map((paragraph, index) => <p key={`${index}-${paragraph.slice(0, 20)}`}>{paragraph}</p>)}
+        </section>
         <div className="drawer-actions"><button onClick={() => toggleSaved(selected.id)}>{saved.includes(selected.id) ? "♥ 已收藏" : "♡ 收藏"}</button><a href={selected.url} target="_blank" rel="noreferrer">阅读原文 ↗</a></div>
       </div>
     </aside></>}
