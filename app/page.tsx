@@ -34,6 +34,14 @@ const relative = (value: string) => {
 };
 const isEnglish = (story: Story) => !/[\u4e00-\u9fff]/.test(`${story.title}${story.summary}`);
 const oneSentence = (value = "") => value.match(/^[\s\S]*?[。！？.!?]/)?.[0]?.trim() || value.trim();
+const sourceCategory = (source: SourceStatus) => {
+  const name = source.name.toLowerCase();
+  if (/arxiv|mit|research|研究院|实验室|lab|科学院|科学报|papers|stanford|berkeley|智源|之江/.test(name)) return "学术研究";
+  if (/openai|anthropic|deepmind|meta ai|nvidia|apple|ibm|salesforce|adobe|stability|mistral|cohere|xai|deepseek|智谱|百川|月之暗面|minimax|零一万物|商汤|讯飞|达摩院|noah|腾讯 ai/.test(name)) return "官方与实验室";
+  if (/开发|github|hugging face|csdn|掘金|segment|cloud|云|langchain|llamaindex|vercel|mongodb|databricks|snowflake|replicate|together/.test(name)) return "开发者社区";
+  return source.chinese ? "中文科技媒体" : "国际科技媒体";
+};
+const sourceCategories = ["全部来源", "中文科技媒体", "官方与实验室", "学术研究", "开发者社区", "国际科技媒体"];
 
 export default function Home() {
   const [active, setActive] = useState("今日资讯");
@@ -58,6 +66,8 @@ export default function Home() {
   const [asking, setAsking] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sourceQuery, setSourceQuery] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("全部来源");
+  const [disabledSources, setDisabledSources] = useState<string[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const loadNews = useCallback(async (manual = false) => {
@@ -86,9 +96,12 @@ export default function Home() {
   useEffect(() => {
     const stored = window.localStorage.getItem("ai-brief-saved");
     if (stored) setSaved(JSON.parse(stored));
+    const disabled = window.localStorage.getItem("ai-brief-disabled-sources");
+    if (disabled) setDisabledSources(JSON.parse(disabled));
     void loadNews();
   }, [loadNews]);
   useEffect(() => { window.localStorage.setItem("ai-brief-saved", JSON.stringify(saved)); }, [saved]);
+  useEffect(() => { window.localStorage.setItem("ai-brief-disabled-sources", JSON.stringify(disabledSources)); }, [disabledSources]);
 
   const filtered = useMemo(() => {
     const result = stories.filter((story) => {
@@ -96,13 +109,14 @@ export default function Home() {
       return (!query || text.includes(query.toLowerCase()))
         && (category === "全部分类" || story.category === category)
         && (importance === "全部级别" || story.level === importance)
+        && !disabledSources.includes(story.source)
         && (active !== "我的收藏" || saved.includes(story.id));
     });
     return result.sort((a, b) => sort === "时间优先"
       ? new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
       : sort === "多源提及优先" ? b.related - a.related
       : (b.score + b.trustScore * .35 + b.related * 4) - (a.score + a.trustScore * .35 + a.related * 4));
-  }, [stories, query, category, importance, active, saved, sort]);
+  }, [stories, query, category, importance, disabledSources, active, saved, sort]);
 
   const topStories = filtered.slice(0, 5);
   const pageSize = 12;
@@ -111,6 +125,7 @@ export default function Home() {
   useEffect(() => setPage(1), [query, category, importance, active, sort]);
 
   const toggleSaved = (id: string) => setSaved((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id]);
+  const toggleSource = (name: string) => setDisabledSources((items) => items.includes(name) ? items.filter((item) => item !== name) : [...items, name]);
   const translateStory = async (story: Story) => {
     if (translations[story.id]) {
       setTranslations((items) => {
@@ -263,11 +278,23 @@ export default function Home() {
         {active === "数据源" && <section className="sources-page reveal">
           <div className="page-intro"><div><span className="eyebrow">SOURCE INTELLIGENCE</span><h1>数据源网络</h1><p>中文资讯优先，同时保留全球实验室、学术与科技媒体的一手信号。</p></div></div>
           <label className="source-search">⌕<input value={sourceQuery} onChange={(e) => setSourceQuery(e.target.value)} placeholder="搜索数据源…" /></label>
-          <div className="source-summary"><div><b>{sources.length}</b><span>数据源总数</span></div><div><b>{sources.filter((s) => s.chinese).length}</b><span>中文来源</span></div><div><b>{sources.filter((s) => s.ok).length}</b><span>当前在线</span></div></div>
-          <div className="source-list">{sources.filter((source) => source.name.toLowerCase().includes(sourceQuery.toLowerCase())).map((source) => <a href={source.homepage} target="_blank" rel="noreferrer" key={source.name}>
-            <span className="source-mark">{source.mark}</span><div><b>{source.name}</b><small>{source.chinese ? "中文资讯" : "国际信源"} · {source.type.toUpperCase()}</small></div>
-            <span className={`health ${source.ok ? "ok" : ""}`}>{source.ok ? "在线" : "暂时不可用"}</span><strong>{source.itemCount}<small>条内容</small></strong><i>↗</i>
-          </a>)}</div>
+          <div className="source-summary"><div><b>{sources.length}</b><span>数据源总数</span></div><div><b>{sources.filter((source) => !disabledSources.includes(source.name)).length}</b><span>已启用数据源</span></div><div><b>{sources.filter((s) => s.ok).length}</b><span>在线数据源</span></div></div>
+          <div className="source-category-tabs">{sourceCategories.map((item) => {
+            const count = item === "全部来源" ? sources.length : sources.filter((source) => sourceCategory(source) === item).length;
+            return <button key={item} className={sourceFilter === item ? "active" : ""} onClick={() => setSourceFilter(item)}>{item}<span>{count}</span></button>;
+          })}</div>
+          <div className="source-tag-grid">{sources.filter((source) =>
+            source.name.toLowerCase().includes(sourceQuery.toLowerCase())
+            && (sourceFilter === "全部来源" || sourceCategory(source) === sourceFilter)
+          ).map((source) => {
+            const enabled = !disabledSources.includes(source.name);
+            return <article className={`source-tag ${enabled ? "" : "disabled"}`} key={source.name}>
+              <div className="source-tag-head"><span className="source-mark">{source.mark}</span><div><b>{source.name}</b><small>{sourceCategory(source)}</small></div>
+                <button className={`source-toggle ${enabled ? "on" : ""}`} onClick={() => toggleSource(source.name)} role="switch" aria-checked={enabled} aria-label={`${enabled ? "停用" : "启用"} ${source.name}`}><i /></button>
+              </div>
+              <div className="source-tag-meta"><span className={`health ${source.ok ? "ok" : ""}`}>{source.ok ? "在线" : "暂时不可用"}</span><span>{source.itemCount} 条内容</span><a href={source.homepage} target="_blank" rel="noreferrer">访问来源 ↗</a></div>
+            </article>;
+          })}</div>
         </section>}
       </div>
     </section>
