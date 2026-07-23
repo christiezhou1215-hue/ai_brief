@@ -16,6 +16,11 @@ const allowedDomains = [
   "perplexity.ai", "x.ai", "databricks.com", "snowflake.com", "mongodb.com", "vercel.com",
   "langchain.com", "llamaindex.ai", "together.ai", "replicate.com", "paperswithcode.com",
   "venturebeat.com", "wired.com", "arstechnica.com",
+  "caixin.com", "yicai.com", "eeo.com.cn", "jiemian.com", "stcn.com", "cnstock.com",
+  "cs.com.cn", "21jingji.com", "infzm.com", "nfnews.com", "beijingdaily.com.cn", "gmw.cn",
+  "china.com.cn", "cyol.com", "cls.cn", "ndrc.gov.cn", "tsinghua.edu.cn", "pku.edu.cn",
+  "fudan.edu.cn", "sjtu.edu.cn", "reuters.com", "apnews.com", "ft.com", "bloomberg.com",
+  "nature.com", "science.org", "stanford.edu", "berkeley.edu", "allenai.org", "mozilla.ai",
 ];
 
 export const safeArticleUrl = (value: string) => {
