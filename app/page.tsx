@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Story = {
   id: string; title: string; source: string; sourceMark: string; publishedAt: string; url: string;
@@ -89,6 +89,9 @@ export default function Home() {
   const [disabledSources, setDisabledSources] = useState<string[]>([]);
   const [subscribedTopics, setSubscribedTopics] = useState<string[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [syncStage, setSyncStage] = useState("连接数据源");
+  const [askStage, setAskStage] = useState("读取实时资讯");
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const loadNews = useCallback(async (manual = false, disabledOverride?: string[]) => {
     if (manual) setRefreshing(true); else setLoading(true);
@@ -131,6 +134,23 @@ export default function Home() {
   useEffect(() => { window.localStorage.setItem("ai-brief-disabled-sources", JSON.stringify(disabledSources)); }, [disabledSources]);
   useEffect(() => { window.localStorage.setItem("ai-brief-translations", JSON.stringify(translations)); }, [translations]);
   useEffect(() => { window.localStorage.setItem("ai-brief-topics", JSON.stringify(subscribedTopics)); }, [subscribedTopics]);
+  useEffect(() => {
+    if (!loading && !refreshing) return;
+    setSyncStage("连接数据源");
+    const first = window.setTimeout(() => setSyncStage("聚合相同事件"), 900);
+    const second = window.setTimeout(() => setSyncStage("生成今日摘要"), 2_100);
+    return () => { window.clearTimeout(first); window.clearTimeout(second); };
+  }, [loading, refreshing]);
+  useEffect(() => {
+    if (!asking) return;
+    setAskStage("读取实时资讯");
+    const first = window.setTimeout(() => setAskStage("跨来源综合判断"), 900);
+    const second = window.setTimeout(() => setAskStage("组织答案与引用"), 2_100);
+    return () => { window.clearTimeout(first); window.clearTimeout(second); };
+  }, [asking]);
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, asking, askStage]);
 
   const filtered = useMemo(() => {
     const result = stories.filter((story) => {
@@ -273,14 +293,14 @@ export default function Home() {
         </button>
       </header>
 
-      <div className="content">
+      <div className="content page-stage" key={active}>
         {(active === "今日资讯" || active === "我的收藏") && <>
           <section className="page-intro reveal">
             <div><span className="eyebrow">AI SIGNAL DESK · {new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(new Date())}</span>
               <h1>{active === "我的收藏" ? "我的收藏" : "今日资讯"}</h1>
               <p>{active === "我的收藏" ? "你保存的高价值内容，随时回来继续阅读。" : "从海量动态中提炼值得关注、值得相信、值得行动的事件。"}</p>
             </div>
-            <div className="live-status"><span /><b>{loading ? "正在建立实时连接" : "实时更新"}</b><small>{updatedAt ? `最近同步 ${formatDate(updatedAt)}` : "准备同步"}</small></div>
+            <div className={`live-status ${loading || refreshing ? "working" : ""}`}><span /><b>{loading || refreshing ? syncStage : "实时更新"}</b><small>{updatedAt ? `最近同步 ${formatDate(updatedAt)}` : "准备同步"}</small></div>
           </section>
 
           {active === "今日资讯" && <section className="brief-hero reveal delay-1">
@@ -318,7 +338,8 @@ export default function Home() {
             : paged.length ? <section className="story-grid editorial">
               {paged.map((story, index) => {
                 const translated = displayed(story);
-                return <article className={`story-card ${index === 0 ? "lead" : ""}`} key={story.id} onClick={() => openStory(story)}>
+                return <article className={`story-card ${index === 0 ? "lead" : ""} ${story.imageUrl ? "has-image" : ""}`} style={{ "--card-order": index } as React.CSSProperties} key={story.id} onClick={() => openStory(story)}>
+                {story.imageUrl && <div className="story-image-wrap"><img src={story.imageUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.parentElement?.remove(); }} /><span>原文配图</span></div>}
                 <div className="story-head"><span className="source-mark">{story.sourceMark}</span><div><b>{story.source}</b><small>{relative(story.publishedAt)}</small></div>
                   <button className={`save ${saved.includes(story.id) ? "saved" : ""}`} onClick={(e) => { e.stopPropagation(); toggleSaved(story.id); }} aria-label="收藏">{saved.includes(story.id) ? "♥" : "♡"}</button>
                 </div>
@@ -338,7 +359,7 @@ export default function Home() {
           <div className="chat-stream">{messages.map((message, index) => <div className={`message ${message.role}`} key={index}>
             <span className="avatar">{message.role === "user" ? "你" : "✦"}</span><div>{message.role === "assistant" ? <AnswerContent content={message.content} /> : <p>{message.content}</p>}
               {message.citations?.length ? <div className="citations">{message.citations.map((citation) => <a key={citation.url} href={citation.url} target="_blank" rel="noreferrer"><b>{citation.source}</b><span>{citation.title}</span>↗</a>)}</div> : null}
-            </div></div>)}{asking && <div className="message assistant"><span className="avatar">✦</span><div className="thinking"><i /><i /><i /></div></div>}</div>
+            </div></div>)}{asking && <div className="message assistant generating"><span className="avatar">✦</span><div className="thinking"><span>{askStage}</span><div><i /><i /><i /></div><b><em /></b></div></div>}<div ref={chatEndRef} /></div>
           <div className="ask-composer"><textarea value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(); } }} placeholder="问任何关于 AI 行业、产品、模型或趋势的问题…" /><div><span>回答将优先引用当前资讯 · Enter 发送</span><button onClick={() => void ask()} disabled={!question.trim() || asking}>发送 <b>↑</b></button></div></div>
         </section>}
 
@@ -350,7 +371,7 @@ export default function Home() {
             const count = item === "全部来源" ? sources.length : sources.filter((source) => sourceCategory(source) === item).length;
             return <button key={item} className={sourceFilter === item ? "active" : ""} onClick={() => setSourceFilter(item)}>{item}<span>{count}</span></button>;
           })}</div>
-          <div className="source-tag-grid">{sources.filter((source) =>
+          <div className="source-tag-grid" key={`${sourceFilter}-${sourceQuery}`}>{sources.filter((source) =>
             source.name.toLowerCase().includes(sourceQuery.toLowerCase())
             && (sourceFilter === "全部来源" || sourceCategory(source) === sourceFilter)
           ).map((source) => {
@@ -366,7 +387,7 @@ export default function Home() {
       </div>
     </section>
 
-    {selected && <><button className="backdrop" onClick={() => setSelected(null)} aria-label="关闭详情" /><aside className="drawer">
+    {selected && <><button className="backdrop" onClick={() => setSelected(null)} aria-label="关闭详情" /><aside className="drawer" key={selected.id}>
       <div className="drawer-head"><span>AI Brief · 内容洞察</span><button onClick={() => setSelected(null)}>×</button></div>
       <div className="drawer-content">
         <div className="drawer-source"><span className="source-mark">{selected.sourceMark}</span><div><b>{selected.source}</b><small>{formatDate(selected.publishedAt)}</small></div></div>
