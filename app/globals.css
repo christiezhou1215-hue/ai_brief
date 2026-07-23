@@ -516,3 +516,18 @@ body{background:
   .calendar-date .calendar-month b,.calendar-date .calendar-month small{font-size:8px}
   .calendar-date .calendar-meta{padding-left:6px}
 }
+
+/* Tighter daily brief and equal-height topbar controls */
+.topbar .global-search{height:56px;border-radius:14px;padding-inline:15px}
+.brief-copy{min-height:148px;padding:20px 25px}
+.insight-points{margin-top:8px;gap:5px}
+.insight-points li{line-height:1.5}
+.trend-stack{padding:14px 15px;gap:7px}
+.trend-stack button{min-height:38px;padding:9px 12px}
+.trend-title{margin-bottom:0}
+
+@media(max-width:720px){
+  .topbar .global-search{height:39px;border-radius:11px;padding:0}
+  .brief-copy{padding:21px 19px}
+  .trend-stack{padding:12px 13px 14px}
+}
