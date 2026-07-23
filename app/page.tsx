@@ -39,6 +39,15 @@ const completeSummary = (value = "") => {
   if (!text) return "原文暂未提供摘要，可进入详情查看已抓取的信息。";
   return /[。！？.!?]$/.test(text) ? text : `${text}。`;
 };
+const cleanDisplayTitle = (value = "", source = "") => {
+  let text = value.replace(/(?:\.{3,}|…+)/g, " ").replace(/\s+/g, " ").trim();
+  const aliases = [source, source.replace(/\s*(?:科技|新闻|中文|AI|人工智能|开发者社区|开发者|研究院|实验室|学院)$/i, "")].filter((name) => name.length >= 2);
+  aliases.forEach((name) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    text = text.replace(new RegExp(`\\s*(?:[-—–_|｜]|·)\\s*${escaped}\\s*$`, "i"), "").trim();
+  });
+  return text.replace(/\s*(?:[-—–_|｜]|·)\s*(?:光明网|新华网|人民网|中国新闻网|央视网|澎湃新闻|品玩|量子位|机器之心|雷峰网|(?:www\.)?[\w.-]+\.(?:com|cn|net|org)(?:\.cn)?)\s*$/i, "").trim();
+};
 const sourceCategory = (source: SourceStatus) => {
   const name = source.name.toLowerCase();
   if (/arxiv|mit|research|研究院|实验室|lab|科学院|科学报|papers|stanford|berkeley|智源|之江/.test(name)) return "学术研究";
@@ -366,7 +375,7 @@ export default function Home() {
             <div className="brief-copy"><span className="hero-kicker">✦ AI 总结</span>{loading ? <h2>快速读取多个可靠信号源…</h2> : <ul className="insight-points">{insightPoints.map((point, index) => <li key={`${index}-${point}`}><i>{index + 1}</i><span>{point}</span></li>)}</ul>}</div>
             <div className="trend-stack">
               <span className="trend-title">今日重点</span>
-              {topStories.slice(0, 3).map((story, i) => <button key={story.id} onClick={() => openStory(story)}><em>0{i + 1}</em><span>{displayed(story).title}</span><b>↗</b></button>)}
+              {topStories.slice(0, 3).map((story, i) => <button key={story.id} onClick={() => openStory(story)}><em>0{i + 1}</em><span>{cleanDisplayTitle(displayed(story).title, story.source)}</span><b>↗</b></button>)}
             </div>
           </section>}
 
@@ -404,7 +413,7 @@ export default function Home() {
                   <button className={`save ${saved.includes(story.id) ? "saved" : ""}`} onClick={(e) => { e.stopPropagation(); toggleSaved(story.id); }} aria-label="收藏">{saved.includes(story.id) ? "♥" : "♡"}</button>
                 </div>
                 <div className="story-body"><div className="story-badges"><span>{story.category}</span><span className={`level ${story.level}`}>{story.level}</span></div>
-                  <h2>{translated.title}</h2><p>{completeSummary(translated.summary)}</p>
+                  <h2>{cleanDisplayTitle(translated.title, story.source)}</h2><p>{completeSummary(translated.summary)}</p>
                 </div>
                 <div className="story-foot"><span>{story.related >= 3 ? <><b className="multi-source">{story.related} 个来源提及</b> · {story.sourceMentions.slice(0, 3).join("、")}</> : null}</span><button>阅读洞察 <i>→</i></button></div>
               </article>;})}
@@ -464,7 +473,7 @@ export default function Home() {
         <div className="drawer-source"><span className="source-mark">{selected.sourceMark}</span><div><b>{selected.source}</b><small>{formatDate(selected.publishedAt)}</small></div></div>
         <div className="story-badges"><span>{selected.category}</span><span className={`level ${selected.level}`}>{selected.level}</span></div>
         {(articleDetail?.imageUrl || selected.imageUrl) && <img className="article-image" src={articleDetail?.imageUrl || selected.imageUrl} alt="" onError={(event) => { event.currentTarget.hidden = true; }} />}
-        <h2>{displayed(selected).title || articleDetail?.title || selected.title}</h2>
+        <h2>{cleanDisplayTitle(displayed(selected).title || articleDetail?.title || selected.title, selected.source)}</h2>
         <div className="original-meta"><span>{articleDetail?.siteName || selected.source}</span>{articleDetail?.author && <span>作者：{articleDetail.author}</span>}<span>{formatDate(articleDetail?.publishedAt || selected.publishedAt)}</span></div>
         <section className="drawer-section ai-summary"><span>AI 总结摘要</span>
           {articleLoading ? <div className="summary-loading">正在读取原文并生成摘要…</div> : <p>{articleDetail?.aiSummary || displayed(selected).summary || selected.summary}</p>}
