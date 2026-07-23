@@ -351,14 +351,11 @@ export default function Home() {
         <div className="mobile-brand"><span className="mini-logo">A</span> AI Brief</div>
         <section className="signal-banner">
           <div className="banner-orbit"><i /><i /><span>✦</span></div>
-          <div><b>实时信号网络</b><small>DeepSeek 正在分析 {sources.length || 130} 个来源</small></div>
+          <div><b>实时信号网络</b><small>DeepSeek 正在分析 {sources.length || 218} 个来源</small></div>
           <div className="banner-wave" aria-hidden="true">{Array.from({ length: 12 }).map((_, index) => <i key={index} />)}</div>
           <span className="banner-live"><i /> LIVE</span>
         </section>
         <label className="global-search"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索公司、模型、产品或议题…" /><kbd>⌘ K</kbd></label>
-        <button className={`refresh ${refreshing ? "spinning" : ""}`} onClick={() => void loadNews(true)} disabled={refreshing}>
-          <span>↻</span>{refreshing ? "同步中" : "刷新资讯"}
-        </button>
       </header>
 
       <div className="content page-stage" key={active}>
@@ -368,7 +365,9 @@ export default function Home() {
               <h1>{active === "我的收藏" ? "我的收藏" : "今日资讯"}</h1>
               <p>{active === "我的收藏" ? "你保存的高价值内容，随时回来继续阅读。" : "从海量动态中提炼值得关注、值得相信、值得行动的事件。"}</p></div>
             </div>
-            <div className={`live-status ${loading || refreshing ? "working" : ""}`}><span /><b>{loading || refreshing ? syncStage : "实时更新"}</b><small>{updatedAt ? `最近同步 ${formatDate(updatedAt)}` : "准备同步"}</small></div>
+            <div className="live-cluster"><div className={`live-status ${loading || refreshing ? "working" : ""}`}><span /><b>{loading || refreshing ? syncStage : "实时更新"}</b><small>{updatedAt ? `最近同步 ${formatDate(updatedAt)}` : "准备同步"}</small></div>
+              {active === "今日资讯" && <button className={`refresh ${refreshing ? "spinning" : ""}`} onClick={() => void loadNews(true)} disabled={refreshing}><span>↻</span>{refreshing ? "同步中" : "刷新资讯"}</button>}
+            </div>
           </section>
 
           {active === "今日资讯" && <section className="brief-hero reveal delay-1">
@@ -458,7 +457,7 @@ export default function Home() {
         {active === "设置" && <section className="settings-page reveal">
           <div className="page-intro"><div><span className="eyebrow">WORKSPACE SETTINGS</span><h1>设置</h1><p>管理阅读偏好、动效、模型状态与管理员信息。</p></div></div>
           <div className="settings-grid">
-            <section className="settings-card admin-card"><span className="settings-label">管理员</span><div className="admin-profile"><i>周</i><div><h3>周 玉川</h3><p>AI Brief 管理员</p></div><b>OWNER</b></div><div className="admin-meta"><span>工作区<b>AI Brief</b></span><span>数据网络<b>{sources.length || 130} 个来源</b></span><span>在线状态<b>{sources.filter((item) => item.ok).length} 个在线</b></span></div></section>
+            <section className="settings-card admin-card"><span className="settings-label">管理员</span><div className="admin-profile"><i>周</i><div><h3>周 玉川</h3><p>AI Brief 管理员</p></div><b>OWNER</b></div><div className="admin-meta"><span>工作区<b>AI Brief</b></span><span>数据网络<b>{sources.length || 218} 个来源</b></span><span>在线状态<b>{sources.filter((item) => item.ok).length} 个在线</b></span></div></section>
             <section className="settings-card model-card"><span className="settings-label">AI 模型</span><div className="model-status"><i>◆</i><div><h3>DeepSeek</h3><p>总结、翻译、详情摘要与研究问答</p></div><span><i /> 已连接</span></div><small>模型密钥由 Vercel Production 环境安全管理，不写入浏览器或 GitHub。</small></section>
             <section className="settings-card preference-card"><span className="settings-label">阅读偏好</span><div className="setting-row"><div><b>默认内容语言</b><small>切换首页和收藏内容的展示语言</small></div><div className="setting-options"><button className={contentLanguage === "zh" ? "active" : ""} onClick={() => setContentLanguage("zh")}>中文</button><button className={contentLanguage === "en" ? "active" : ""} onClick={() => setContentLanguage("en")}>English</button></div></div><div className="setting-row"><div><b>界面动效</b><small>控制页面切换、信号波形与卡片反馈</small></div><button className={`settings-toggle ${motionEnabled ? "on" : ""}`} onClick={() => setMotionEnabled((value) => !value)} role="switch" aria-checked={motionEnabled}><i /></button></div></section>
             <section className="settings-card cache-card"><span className="settings-label">内容缓存</span><h3>刷新本地内容</h3><p>清理翻译和上次资讯缓存，并立即重新获取最新内容。收藏与主题订阅不会受到影响。</p><button onClick={clearContentCache}>清理并重新同步 ↻</button></section>
