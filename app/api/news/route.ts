@@ -188,8 +188,13 @@ const short = (value: string, max = 150) => {
   const boundary = Math.max(cut.lastIndexOf("。"), cut.lastIndexOf("！"), cut.lastIndexOf("？"), cut.lastIndexOf("；"), cut.lastIndexOf("，"));
   return completeSentence(cut.slice(0, boundary >= 70 ? boundary : max).replace(/[，；、\s]+$/, ""));
 };
-const cleanTitle = (value: string) => {
-  const text = decode(value).replace(/\s+/g, " ").trim();
+const cleanTitle = (value: string, sourceName = "") => {
+  let text = decode(value).replace(/\s+/g, " ").trim();
+  if (sourceName) {
+    const escaped = sourceName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    text = text.replace(new RegExp(`\\s*(?:[-—–_|｜]|·)\\s*${escaped}\\s*$`, "i"), "").trim();
+  }
+  text = text.replace(/\s*(?:[-—–_|｜]|·)\s*(?:阿里云开发者社区|腾讯云开发者社区|华为云开发者联盟|CSDN博客|掘金)\s*$/i, "").trim();
   if (text.length > 65 && (text.match(/[\/｜|]/g)?.length ?? 0) >= 2) {
     return text.split(/[\/]/)[0].trim();
   }
@@ -222,7 +227,7 @@ async function fetchSource(source: Source): Promise<NewsItem[]> {
     const atom = source.type === "atom";
     const blocks = xml.match(atom ? /<entry\b[\s\S]*?<\/entry>/gi : /<item\b[\s\S]*?<\/item>/gi) ?? [];
     return blocks.slice(0, 18).map((block, index) => {
-      const title = cleanTitle(field(block, "title"));
+      const title = cleanTitle(field(block, "title"), source.name);
       const summary = short(field(block, atom ? "summary" : "description") || field(block, "content:encoded"));
       const text = `${title} ${summary}`;
       const publishedAt = decode(field(block, atom ? "published" : "pubDate") || field(block, "updated")) || new Date().toISOString();
