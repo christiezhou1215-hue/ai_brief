@@ -12,7 +12,7 @@ type SourceStatus = {
   name: string; mark: string; homepage: string; type: string; chinese: boolean;
   trustScore: number; ok: boolean; itemCount: number;
 };
-type ChatMessage = { role: "user" | "assistant"; content: string; citations?: Array<{ title: string; source: string; url: string }> };
+type ChatMessage = { role: "user" | "assistant"; content: string; citations?: Array<{ title: string; source: string; url: string }>; followUps?: string[] };
 type Translation = { title: string; summary: string; target: "zh" | "en" };
 type ArticleDetail = { title: string; description: string; imageUrl?: string; siteName?: string; author?: string; publishedAt?: string; aiSummary: string; keyPoints: string[]; paragraphs: string[] };
 
@@ -241,8 +241,8 @@ export default function Home() {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ question: text, history: next, context: stories.slice(0, 160) }),
       });
-      const data = await response.json() as { answer?: string; citations?: ChatMessage["citations"]; error?: string };
-      setMessages((items) => [...items, { role: "assistant", content: data.answer ?? data.error ?? "暂时无法回答。", citations: data.citations }]);
+      const data = await response.json() as { answer?: string; citations?: ChatMessage["citations"]; followUps?: string[]; error?: string };
+      setMessages((items) => [...items, { role: "assistant", content: data.answer ?? data.error ?? "暂时无法回答。", citations: data.citations, followUps: data.followUps }]);
     } catch { setMessages((items) => [...items, { role: "assistant", content: "问答服务暂时不可用，请稍后重试。" }]); }
     finally { setAsking(false); }
   };
@@ -376,11 +376,11 @@ export default function Home() {
 
           {error && <div className="notice"><span>!</span><p>{error}</p><button onClick={() => void loadNews(true)}>立即重试</button></div>}
           <div className="result-meta"><span><b>{filtered.length}</b> 条资讯</span>
-            <div className={`page-language ${pageTranslating ? "loading" : ""}`} aria-label="页面语言">
+            <div className="result-actions"><button className={`focus-important ${importance === "重要" ? "active" : ""}`} onClick={() => setImportance((value) => value === "重要" ? "全部级别" : "重要")}><i>!</i>{importance === "重要" ? "正在重点速览" : "重点速览"}</button><div className={`page-language ${pageTranslating ? "loading" : ""}`} aria-label="页面语言">
               <button className={contentLanguage === "zh" ? "active" : ""} onClick={() => setContentLanguage("zh")}>中文</button>
               <button className={contentLanguage === "en" ? "active" : ""} onClick={() => setContentLanguage("en")}>EN</button>
               {pageTranslating && <span>翻译中…</span>}
-            </div>
+            </div></div>
           </div>
 
           {loading ? <div className="skeleton-grid">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton" />)}</div>
@@ -407,6 +407,7 @@ export default function Home() {
           <div className="chat-stream">{messages.map((message, index) => <div className={`message ${message.role}`} key={index}>
             <span className="avatar">{message.role === "user" ? "你" : "✦"}</span><div>{message.role === "assistant" ? <AnswerContent content={message.content} /> : <p>{message.content}</p>}
               {message.citations?.length ? <div className="citations">{message.citations.map((citation) => <a key={citation.url} href={citation.url} target="_blank" rel="noreferrer"><b>{citation.source}</b><span>{citation.title}</span>↗</a>)}</div> : null}
+              {message.role === "assistant" && message.followUps?.length ? <div className="follow-ups"><span>继续研究</span>{message.followUps.map((item) => <button key={item} onClick={() => void ask(item)} disabled={asking}><i>↗</i>{item}</button>)}</div> : null}
             </div></div>)}{asking && <div className="message assistant generating"><span className="avatar">✦</span><div className="thinking"><span>{askStage}</span><div><i /><i /><i /></div><b><em /></b></div></div>}<div ref={chatEndRef} /></div>
           <div className="ask-composer"><textarea value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(); } }} placeholder="问任何关于 AI 行业、产品、模型或趋势的问题…" /><div><span>回答将优先引用当前资讯 · Enter 发送</span><button onClick={() => void ask()} disabled={!question.trim() || asking}>发送 <b>↑</b></button></div></div>
         </section>}
