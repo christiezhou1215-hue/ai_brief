@@ -9,6 +9,7 @@ const config = () => ({
 });
 
 export const aiConfigured = () => Boolean(config().apiKey);
+export const aiModel = () => config().model;
 
 export async function generateJson<T extends Json>(system: string, input: string): Promise<T | null> {
   const { apiKey, baseUrl, model } = config();
