@@ -143,6 +143,96 @@ const sources: Source[] = [
     ["上海交大人工智能研究院","交","site:ai.sjtu.edu.cn","https://ai.sjtu.edu.cn/"],
   ].map(([name, mark, query, homepage]) => newsSearch(name, mark, query, true, 2, homepage)),
   ...[
+    ["科技部","科部","site:most.gov.cn 人工智能","https://www.most.gov.cn/"],
+    ["教育部科技司","教","site:moe.gov.cn 人工智能 科技","http://www.moe.gov.cn/"],
+    ["国家自然科学基金委","基金","site:nsfc.gov.cn 人工智能","https://www.nsfc.gov.cn/"],
+    ["中国计算机学会","CCF","site:ccf.org.cn 人工智能","https://www.ccf.org.cn/"],
+    ["中国人工智能学会","CAAI","site:caai.cn 人工智能","https://www.caai.cn/"],
+    ["中国电子学会","电","site:cie-info.org.cn 人工智能","https://www.cie-info.org.cn/"],
+    ["中国互联网协会","互","site:isc.org.cn 人工智能","https://www.isc.org.cn/"],
+    ["全国信标委人工智能分委会","信标","人工智能 分委会 标准 新闻","https://www.cesi.cn/"],
+    ["北京市科委","北京","site:kw.beijing.gov.cn 人工智能","https://kw.beijing.gov.cn/"],
+    ["上海市科委","上海","site:stcsm.sh.gov.cn 人工智能","https://stcsm.sh.gov.cn/"],
+    ["广东省科技厅","广东","site:gdstc.gd.gov.cn 人工智能","http://gdstc.gd.gov.cn/"],
+    ["浙江省科技厅","浙江","site:kjt.zj.gov.cn 人工智能","https://kjt.zj.gov.cn/"],
+    ["深圳市科创委","深圳","site:stic.sz.gov.cn 人工智能","https://stic.sz.gov.cn/"],
+    ["中国科学技术大学","中科大","site:ustc.edu.cn 人工智能","https://www.ustc.edu.cn/"],
+    ["浙江大学人工智能研究所","浙大","site:zju.edu.cn 人工智能 研究院","https://www.zju.edu.cn/"],
+    ["南京大学人工智能学院","南大","site:ai.nju.edu.cn","https://ai.nju.edu.cn/"],
+    ["哈尔滨工业大学人工智能研究院","哈工","site:hit.edu.cn 人工智能","https://www.hit.edu.cn/"],
+    ["北京航空航天大学人工智能研究院","北航","site:buaa.edu.cn 人工智能","https://www.buaa.edu.cn/"],
+    ["西安交通大学人工智能学院","西交","site:iair.xjtu.edu.cn","http://iair.xjtu.edu.cn/"],
+    ["华中科技大学人工智能学院","华科","site:aia.hust.edu.cn","http://aia.hust.edu.cn/"],
+    ["武汉大学人工智能研究院","武大","site:whu.edu.cn 人工智能","https://www.whu.edu.cn/"],
+    ["中山大学人工智能学院","中大","site:sysu.edu.cn 人工智能","https://www.sysu.edu.cn/"],
+    ["华南理工大学未来技术学院","华工","site:scut.edu.cn 人工智能","https://www.scut.edu.cn/"],
+    ["电子科技大学计算机学院","成电","site:uestc.edu.cn 人工智能","https://www.uestc.edu.cn/"],
+    ["西安电子科技大学人工智能学院","西电","site:xidian.edu.cn 人工智能","https://www.xidian.edu.cn/"],
+    ["同济大学人工智能研究院","同济","site:tongji.edu.cn 人工智能","https://www.tongji.edu.cn/"],
+    ["中国人民大学高瓴人工智能学院","高瓴","site:ai.ruc.edu.cn","http://ai.ruc.edu.cn/"],
+    ["南开大学人工智能学院","南开","site:ai.nankai.edu.cn","https://ai.nankai.edu.cn/"],
+    ["天津大学智能与计算学部","天大","site:tic.tju.edu.cn 人工智能","http://tic.tju.edu.cn/"],
+    ["东南大学人工智能学院","东南","site:seu.edu.cn 人工智能","https://www.seu.edu.cn/"],
+    ["北京邮电大学人工智能学院","北邮","site:bupt.edu.cn 人工智能","https://www.bupt.edu.cn/"],
+    ["北京理工大学计算机学院","北理","site:bit.edu.cn 人工智能","https://www.bit.edu.cn/"],
+    ["鹏城实验室","鹏","site:pcl.ac.cn 人工智能","https://www.pcl.ac.cn/"],
+    ["IDEA 研究院","IDEA","site:idea.edu.cn 人工智能","https://www.idea.edu.cn/"],
+    ["粤港澳大湾区数字经济研究院","湾","数字经济研究院 IDEA 人工智能","https://www.idea.edu.cn/"],
+    ["中科院自动化所","自动","site:ia.cas.cn 人工智能","http://www.ia.cas.cn/"],
+    ["中科院计算所","计算","site:ict.ac.cn 人工智能","http://www.ict.ac.cn/"],
+    ["中科院软件所","软件","site:iscas.ac.cn 人工智能","http://www.iscas.ac.cn/"],
+    ["微软亚洲研究院","MSRA","site:microsoft.com/zh-cn/research 人工智能","https://www.microsoft.com/zh-cn/research/"],
+    ["联想研究院","联想","联想研究院 人工智能","https://research.lenovo.com/"],
+    ["OPPO 研究院","OP","site:oppo.com 研究院 人工智能","https://www.oppo.com/cn/"],
+    ["vivo AI Lab","VO","vivo AI Lab 人工智能","https://www.vivo.com.cn/"],
+    ["京东探索研究院","京东","京东探索研究院 人工智能","https://www.jd.com/"],
+    ["字节跳动 Seed","Seed","字节跳动 Seed 大模型","https://seed.bytedance.com/"],
+    ["腾讯混元","混元","腾讯混元 大模型","https://hunyuan.tencent.com/"],
+    ["阿里通义","通义","阿里 通义 大模型","https://tongyi.aliyun.com/"],
+    ["百度文心","文心","百度 文心 大模型","https://yiyan.baidu.com/"],
+    ["华为盘古","盘古","华为 盘古大模型","https://www.huaweicloud.com/product/pangu.html"],
+    ["火山方舟","方舟","火山方舟 大模型","https://www.volcengine.com/product/ark"],
+    ["魔搭社区","魔搭","site:modelscope.cn AI","https://modelscope.cn/"],
+    ["飞桨社区","飞桨","site:paddlepaddle.org.cn AI","https://www.paddlepaddle.org.cn/"],
+    ["MindSpore 社区","昇思","site:mindspore.cn AI","https://www.mindspore.cn/"],
+    ["OpenI 启智社区","启智","site:openi.org.cn 人工智能","https://openi.org.cn/"],
+    ["Gitee AI","码云","site:gitee.com AI 模型","https://ai.gitee.com/"],
+    ["Datawhale","DW","site:datawhale.cn 人工智能","https://www.datawhale.cn/"],
+    ["极市平台","极市","site:extremevision.com.cn AI","https://www.extremevision.com.cn/"],
+    ["PaperWeekly","PW","PaperWeekly 人工智能 论文","https://www.paperweekly.site/"],
+    ["AI 研习社","研","site:yanxishe.com 人工智能","https://www.yanxishe.com/"],
+    ["51CTO AI","51","site:51cto.com AI 大模型","https://www.51cto.com/"],
+    ["华为开发者联盟","华开","site:developer.huawei.com AI","https://developer.huawei.com/consumer/cn/"],
+    ["百度开发者中心","百度开","site:developer.baidu.com AI","https://developer.baidu.com/"],
+    ["甲子光年","甲","site:jazzyear.com 人工智能","https://www.jazzyear.com/"],
+    ["AI 科技评论","AI评","AI科技评论 人工智能","https://www.leiphone.com/category/ai"],
+    ["镁客网","镁","site:im2maker.com 人工智能","https://www.im2maker.com/"],
+    ["亿欧科技","亿","site:iyiou.com 人工智能","https://www.iyiou.com/"],
+    ["创业邦科技","创","site:cyzone.cn 人工智能","https://www.cyzone.cn/"],
+    ["投资界科技","投","site:pedaily.cn 人工智能","https://www.pedaily.cn/"],
+    ["DoNews 科技","DN","site:donews.com 人工智能","https://www.donews.com/"],
+    ["TechWeb","TW","site:techweb.com.cn 人工智能","http://www.techweb.com.cn/"],
+    ["每日经济新闻科技","每","site:nbd.com.cn 人工智能 科技","https://www.nbd.com.cn/"],
+    ["经济日报科技","经日","site:ce.cn 人工智能 科技","http://www.ce.cn/"],
+    ["中国经营报科技","经营","site:cb.com.cn 人工智能 科技","http://www.cb.com.cn/"],
+    ["环球网科技","环球","site:huanqiu.com 人工智能 科技","https://tech.huanqiu.com/"],
+    ["上观新闻科技","上观","site:jfdaily.com 人工智能 科技","https://www.jfdaily.com/"],
+    ["新京报科技","新京","site:bjnews.com.cn 人工智能 科技","https://www.bjnews.com.cn/"],
+    ["深圳特区报科技","深报","site:sznews.com 人工智能 科技","https://www.sznews.com/"],
+    ["羊城晚报科技","羊","site:ycwb.com 人工智能 科技","https://www.ycwb.com/"],
+    ["阶跃星辰","阶","site:stepfun.com 人工智能","https://www.stepfun.com/"],
+    ["面壁智能","面","site:modelbest.cn 人工智能","https://www.modelbest.cn/"],
+    ["生数科技","生","site:shengshu-ai.com 人工智能","https://www.shengshu-ai.com/"],
+    ["无问芯穹","芯穹","site:infinigence.ai 人工智能","https://www.infinigence.ai/"],
+    ["硅基流动","硅","site:siliconflow.cn 人工智能","https://siliconflow.cn/"],
+    ["秘塔科技","秘","site:metaso.cn 人工智能","https://metaso.cn/"],
+    ["云天励飞","云","site:intellif.com 人工智能","https://www.intellif.com/"],
+    ["第四范式","四","site:4paradigm.com 人工智能","https://www.4paradigm.com/"],
+    ["寒武纪","寒","site:cambricon.com 人工智能 芯片","https://www.cambricon.com/"],
+    ["摩尔线程","摩","site:moorethreads.com 人工智能","https://www.moorethreads.com/"],
+    ["地平线机器人","地","site:horizon.auto 人工智能","https://www.horizon.auto/"],
+  ].map(([name, mark, query, homepage]) => newsSearch(name, mark, query, true, 2, homepage)),
+  ...[
     ["Reuters Technology","RT","site:reuters.com/technology artificial intelligence","https://www.reuters.com/technology/"],
     ["AP Technology","APN","site:apnews.com technology artificial intelligence","https://apnews.com/technology"],
     ["Financial Times AI","FT","site:ft.com/artificial-intelligence","https://www.ft.com/artificial-intelligence"],
@@ -174,6 +264,7 @@ const completeSentence = (value: string) => /[。！？.!?]$/.test(value) ? valu
 const short = (value: string, max = 150) => {
   const text = decode(value)
     .replace(/^[·•\-–—\s]+/, "")
+    .replace(/(?:\.{3,}|…{2,})/g, "。")
     .replace(/#\S+/g, "")
     .replace(/欢迎关注[\s\S]*$/i, "")
     .replace(/(?:微信公众号|微信号|更多精彩内容)[\s\S]*$/i, "")
@@ -186,19 +277,26 @@ const short = (value: string, max = 150) => {
   if (candidate.length <= max) return completeSentence(candidate);
   const cut = candidate.slice(0, max);
   const boundary = Math.max(cut.lastIndexOf("。"), cut.lastIndexOf("！"), cut.lastIndexOf("？"), cut.lastIndexOf("；"), cut.lastIndexOf("，"));
-  return completeSentence(cut.slice(0, boundary >= 70 ? boundary : max).replace(/[，；、\s]+$/, ""));
+  return completeSentence(cut.slice(0, boundary >= 55 ? boundary : max).replace(/[，；、\s]+$/, "").replace(/\s*(?:\.{3,}|…+)\s*$/, ""));
 };
 const cleanTitle = (value: string, sourceName = "") => {
-  let text = decode(value).replace(/\s+/g, " ").trim();
-  if (sourceName) {
-    const escaped = sourceName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let text = decode(value).replace(/(?:\.{3,}|…+)/g, " ").replace(/\s+/g, " ").trim();
+  const aliases = sourceName ? [
+    sourceName,
+    sourceName.replace(/\s*(?:科技|新闻|中文|AI|人工智能|开发者社区|开发者|研究院|实验室|学院)$/i, ""),
+  ].filter((name) => name.length >= 2) : [];
+  aliases.forEach((name) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     text = text.replace(new RegExp(`\\s*(?:[-—–_|｜]|·)\\s*${escaped}\\s*$`, "i"), "").trim();
-  }
-  text = text.replace(/\s*(?:[-—–_|｜]|·)\s*(?:阿里云开发者社区|腾讯云开发者社区|华为云开发者联盟|CSDN博客|掘金)\s*$/i, "").trim();
+  });
+  text = text
+    .replace(/\s*(?:[-—–_|｜]|·)\s*(?:阿里云开发者社区|腾讯云开发者社区|华为云开发者联盟|CSDN博客|掘金|光明网|新华网|人民网|中国新闻网|央视网|新浪科技|搜狐科技|网易科技|凤凰科技|澎湃新闻|极客公园|品玩|量子位|机器之心|雷峰网)\s*$/i, "")
+    .replace(/\s*(?:[-—–_|｜]|·)\s*(?:www\.)?[\w.-]+\.(?:com|cn|net|org)(?:\.cn)?\s*$/i, "")
+    .trim();
   if (text.length > 65 && (text.match(/[\/｜|]/g)?.length ?? 0) >= 2) {
     return text.split(/[\/]/)[0].trim();
   }
-  return text.length > 88 ? `${text.slice(0, 86).replace(/[，、；:\s]+$/, "")}…` : text;
+  return text;
 };
 const isAi = (text: string) => /人工智能|大模型|模型|智能体|机器人|算法|芯片|\bai\b|gpt|claude|gemini|deepseek|llm|agent/i.test(text);
 const categoryFor = (text: string) => /agent|智能体|copilot/i.test(text) ? "AI Agent"
