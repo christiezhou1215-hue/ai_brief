@@ -17,8 +17,8 @@ type Translation = { title: string; summary: string; target: "zh" | "en" };
 type ArticleDetail = { title: string; description: string; imageUrl?: string; siteName?: string; author?: string; publishedAt?: string; aiSummary: string; keyPoints: string[]; paragraphs: string[] };
 
 const nav = [
-  { icon: "✦", label: "今日资讯" },
-  { icon: "✧", label: "AI 问答" },
+  { icon: "▦", label: "今日资讯" },
+  { icon: "✦", label: "AI 问答" },
   { icon: "♡", label: "我的收藏" },
   { icon: "◉", label: "数据源" },
 ];
@@ -92,6 +92,7 @@ export default function Home() {
   const [editingTopic, setEditingTopic] = useState<string | null>(null);
   const [topicDraft, setTopicDraft] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [motionEnabled, setMotionEnabled] = useState(true);
   const [syncStage, setSyncStage] = useState("连接数据源");
   const [askStage, setAskStage] = useState("读取实时资讯");
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -133,6 +134,7 @@ export default function Home() {
     if (topics) setSubscribedTopics(JSON.parse(topics));
     const custom = window.localStorage.getItem("ai-brief-custom-topics");
     if (custom) setCustomTopics(JSON.parse(custom));
+    setMotionEnabled(window.localStorage.getItem("ai-brief-motion") !== "off");
     void loadNews(false, disabledList);
   }, [loadNews]);
   useEffect(() => { window.localStorage.setItem("ai-brief-saved", JSON.stringify(saved)); }, [saved]);
@@ -140,6 +142,7 @@ export default function Home() {
   useEffect(() => { window.localStorage.setItem("ai-brief-translations", JSON.stringify(translations)); }, [translations]);
   useEffect(() => { window.localStorage.setItem("ai-brief-topics", JSON.stringify(subscribedTopics)); }, [subscribedTopics]);
   useEffect(() => { window.localStorage.setItem("ai-brief-custom-topics", JSON.stringify(customTopics)); }, [customTopics]);
+  useEffect(() => { window.localStorage.setItem("ai-brief-motion", motionEnabled ? "on" : "off"); }, [motionEnabled]);
   useEffect(() => {
     if (!loading && !refreshing) return;
     setSyncStage("连接数据源");
@@ -236,7 +239,7 @@ export default function Home() {
     try {
       const response = await fetch("/api/ask", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ question: text, history: next, context: stories.slice(0, 60) }),
+        body: JSON.stringify({ question: text, history: next, context: stories.slice(0, 160) }),
       });
       const data = await response.json() as { answer?: string; citations?: ChatMessage["citations"]; error?: string };
       setMessages((items) => [...items, { role: "assistant", content: data.answer ?? data.error ?? "暂时无法回答。", citations: data.citations }]);
@@ -296,7 +299,14 @@ export default function Home() {
     }).finally(() => setPageTranslating(false));
   }, [active, contentLanguage, dailyInsight, insightTranslationKey, loading, page, pageTranslating, paged, topStories, translations]);
 
-  return <main className={`app-shell ${sidebarCollapsed ? "nav-collapsed" : ""}`}>
+  const clearContentCache = () => {
+    window.localStorage.removeItem("ai-brief-last-news");
+    window.localStorage.removeItem("ai-brief-translations");
+    setTranslations({});
+    void loadNews(true);
+  };
+
+  return <main className={`app-shell ${sidebarCollapsed ? "nav-collapsed" : ""} ${motionEnabled ? "" : "reduce-motion"}`}>
     <aside className="sidebar">
       <button className="brand" onClick={() => setActive("今日资讯")} aria-label="返回首页">
         <span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M9.5 20A10.5 10.5 0 0 1 20 9.5" /><path d="M30.5 20A10.5 10.5 0 0 1 20 30.5" /><path className="outer" d="M5.5 20A14.5 14.5 0 0 1 20 5.5" /><path className="outer" d="M34.5 20A14.5 14.5 0 0 1 20 34.5" /><circle cx="20" cy="20" r="3.2" /></svg></span>
@@ -313,7 +323,7 @@ export default function Home() {
         <span className="pulse-dot" />
         <div><b>{sources.filter((item) => item.ok).length}/{sources.length || "—"} 数据源在线</b><small>实时信号监测</small></div>
       </div>
-      <div className="profile"><span>周</span><div><b>周 玉川</b><small>AI Brief 管理员</small></div><button>•••</button></div>
+      <button className={`settings-entry ${active === "设置" ? "active" : ""}`} onClick={() => setActive("设置")}><span className="nav-icon">⚙</span><span>设置</span></button>
     </aside>
 
     <section className="workspace">
@@ -392,7 +402,7 @@ export default function Home() {
         </>}
 
         {active === "AI 问答" && <section className="ask-page reveal">
-          <div className="ask-header"><span className="ask-orb">✦</span><span className="eyebrow">AI BRIEF RESEARCH ASSISTANT</span><h1>从资讯中，找到答案。</h1><p>基于当前抓取的新闻、历史上下文与多来源信号进行回答，并附上可核查的出处。</p></div>
+          <div className="ask-header"><span className="ask-orb">✦</span><span className="eyebrow">AI BRIEF RESEARCH ASSISTANT</span><h1>从资讯中，找到答案</h1><p>基于当前抓取的新闻、历史上下文与实时补充检索进行回答，并附上可核查的出处。</p></div>
           {!messages.length && <div className="suggestions">{["今天最重要的 AI 变化是什么？","最近有哪些新模型发布？","哪些新闻得到了多个来源印证？","总结中国 AI 行业近期趋势"].map((item) => <button key={item} onClick={() => void ask(item)}><span>↗</span>{item}</button>)}</div>}
           <div className="chat-stream">{messages.map((message, index) => <div className={`message ${message.role}`} key={index}>
             <span className="avatar">{message.role === "user" ? "你" : "✦"}</span><div>{message.role === "assistant" ? <AnswerContent content={message.content} /> : <p>{message.content}</p>}
@@ -421,6 +431,16 @@ export default function Home() {
             </article>;
           })}</div>
           {sourceTotalPages > 1 && <div className="pagination source-pagination"><button disabled={sourcePage === 1} onClick={() => setSourcePage((value) => value - 1)}>← 上一页</button><div>{Array.from({ length: sourceTotalPages }, (_, index) => index + 1).slice(Math.max(0, sourcePage - 3), Math.min(sourceTotalPages, sourcePage + 2)).map((item) => <button key={item} className={sourcePage === item ? "active" : ""} onClick={() => setSourcePage(item)}>{item}</button>)}</div><button disabled={sourcePage === sourceTotalPages} onClick={() => setSourcePage((value) => value + 1)}>下一页 →</button></div>}
+        </section>}
+
+        {active === "设置" && <section className="settings-page reveal">
+          <div className="page-intro"><div><span className="eyebrow">WORKSPACE SETTINGS</span><h1>设置</h1><p>管理阅读偏好、动效、模型状态与管理员信息。</p></div></div>
+          <div className="settings-grid">
+            <section className="settings-card admin-card"><span className="settings-label">管理员</span><div className="admin-profile"><i>周</i><div><h3>周 玉川</h3><p>AI Brief 管理员</p></div><b>OWNER</b></div><div className="admin-meta"><span>工作区<b>AI Brief</b></span><span>数据网络<b>{sources.length || 130} 个来源</b></span><span>在线状态<b>{sources.filter((item) => item.ok).length} 个在线</b></span></div></section>
+            <section className="settings-card model-card"><span className="settings-label">AI 模型</span><div className="model-status"><i>◆</i><div><h3>DeepSeek</h3><p>总结、翻译、详情摘要与研究问答</p></div><span><i /> 已连接</span></div><small>模型密钥由 Vercel Production 环境安全管理，不写入浏览器或 GitHub。</small></section>
+            <section className="settings-card preference-card"><span className="settings-label">阅读偏好</span><div className="setting-row"><div><b>默认内容语言</b><small>切换首页和收藏内容的展示语言</small></div><div className="setting-options"><button className={contentLanguage === "zh" ? "active" : ""} onClick={() => setContentLanguage("zh")}>中文</button><button className={contentLanguage === "en" ? "active" : ""} onClick={() => setContentLanguage("en")}>English</button></div></div><div className="setting-row"><div><b>界面动效</b><small>控制页面切换、信号波形与卡片反馈</small></div><button className={`settings-toggle ${motionEnabled ? "on" : ""}`} onClick={() => setMotionEnabled((value) => !value)} role="switch" aria-checked={motionEnabled}><i /></button></div></section>
+            <section className="settings-card cache-card"><span className="settings-label">内容缓存</span><h3>刷新本地内容</h3><p>清理翻译和上次资讯缓存，并立即重新获取最新内容。收藏与主题订阅不会受到影响。</p><button onClick={clearContentCache}>清理并重新同步 ↻</button></section>
+          </div>
         </section>}
       </div>
     </section>
