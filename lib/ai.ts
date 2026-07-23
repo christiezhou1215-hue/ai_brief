@@ -24,6 +24,7 @@ export async function generateJson<T extends Json>(system: string, input: string
       body: JSON.stringify({
         model,
         temperature: 0.2,
+        max_tokens: 1400,
         response_format: { type: "json_object" },
         messages: [{ role: "system", content: system }, { role: "user", content: input }],
       }),
