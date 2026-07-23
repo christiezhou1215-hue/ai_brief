@@ -94,3 +94,10 @@
 .page-language button:active,.source-toggle:active,.refresh:active{transform:scale(.96)}
 @keyframes topicPop{0%{transform:scale(.55)}70%{transform:scale(1.15)}100%{transform:scale(1)}}
 @media(max-width:850px){.topic-subscriptions{align-items:flex-start;flex-direction:column}.topic-subscriptions>div:first-child{flex-basis:auto}}
+
+/* Minimal signal wordmark */
+.brand-mark{display:flex;align-items:flex-end;justify-content:center;gap:3px;width:36px;height:36px;border-radius:11px;background:#f8fbf9;border:1px solid #d4e1dc;box-shadow:0 5px 14px rgba(18,70,55,.07);overflow:hidden}
+.brand-mark i,.brand-mark i:first-of-type,.brand-mark i:last-of-type{position:static;display:block;width:3px;border:0;border-radius:999px;background:var(--green);transform:none;box-shadow:none}
+.brand-mark i:nth-child(1){height:9px;opacity:.48}
+.brand-mark i:nth-child(2){height:16px;opacity:.72}
+.brand-mark i:nth-child(3){height:23px;background:linear-gradient(to top,var(--green) 0 72%,var(--gold) 72% 100%)}
