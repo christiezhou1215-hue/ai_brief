@@ -1,11 +1,9 @@
 type Json = Record<string, unknown>;
 
 const config = () => ({
-  apiKey: process.env.AI_API_KEY || process.env.CLOUDFLARE_API_TOKEN || "",
-  baseUrl: process.env.CLOUDFLARE_ACCOUNT_ID
-    ? `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/v1`
-    : (process.env.AI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, ""),
-  model: process.env.AI_MODEL || (process.env.CLOUDFLARE_ACCOUNT_ID ? "@cf/qwen/qwen3-30b-a3b-fp8" : "gpt-4o-mini"),
+  apiKey: process.env.DEEPSEEK_API_KEY || process.env.AI_API_KEY || "",
+  baseUrl: (process.env.DEEPSEEK_BASE_URL || process.env.AI_BASE_URL || "https://api.deepseek.com").replace(/\/$/, ""),
+  model: process.env.DEEPSEEK_MODEL || process.env.AI_MODEL || "deepseek-v4-flash",
 });
 
 export const aiConfigured = () => Boolean(config().apiKey);

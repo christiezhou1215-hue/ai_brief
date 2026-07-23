@@ -120,6 +120,40 @@ const sources: Source[] = [
     ["WIRED AI","WI","site:wired.com/tag/artificial-intelligence","https://www.wired.com/tag/artificial-intelligence/"],
     ["Ars Technica AI","ARS","site:arstechnica.com/ai","https://arstechnica.com/ai/"],
   ].map(([name, mark, query, homepage]) => newsSearch(name, mark, query, false, 2, homepage)),
+  ...[
+    ["财新科技","财","site:caixin.com 科技 人工智能","https://www.caixin.com/technology/"],
+    ["第一财经科技","一","site:yicai.com 科技 人工智能","https://www.yicai.com/technology/"],
+    ["经济观察报科技","经","site:eeo.com.cn 科技 人工智能","http://www.eeo.com.cn/"],
+    ["界面新闻科技","界","site:jiemian.com 科技 人工智能","https://www.jiemian.com/lists/280.html"],
+    ["证券时报科技","证","site:stcn.com 科技 人工智能","https://www.stcn.com/"],
+    ["上海证券报科技","上","site:cnstock.com 科技 人工智能","https://www.cnstock.com/"],
+    ["中国证券报科技","报","site:cs.com.cn 科技 人工智能","https://www.cs.com.cn/"],
+    ["21世纪经济报道","21","site:21jingji.com 科技 人工智能","https://www.21jingji.com/"],
+    ["南方周末科技","南","site:infzm.com 科技 人工智能","https://www.infzm.com/"],
+    ["南方都市报 AI","都","site:nfnews.com 人工智能 科技","https://www.nfnews.com/"],
+    ["北京日报科技","京","site:beijingdaily.com.cn 科技 人工智能","https://www.beijingdaily.com.cn/"],
+    ["光明网科技","光","site:gmw.cn 科技 人工智能","https://tech.gmw.cn/"],
+    ["中国网科技","国","site:china.com.cn 科技 人工智能","http://tech.china.com.cn/"],
+    ["中国青年报科技","青","site:cyol.com 科技 人工智能","https://www.cyol.com/"],
+    ["财联社科技","联","site:cls.cn 科技 人工智能","https://www.cls.cn/"],
+    ["国家发改委数字经济","发","site:ndrc.gov.cn 数字经济 人工智能","https://www.ndrc.gov.cn/"],
+    ["清华大学智能产业研究院","清","site:air.tsinghua.edu.cn","https://air.tsinghua.edu.cn/"],
+    ["北京大学人工智能研究院","北","site:ai.pku.edu.cn","https://www.ai.pku.edu.cn/"],
+    ["复旦大学计算机学院","复","site:cs.fudan.edu.cn 人工智能","https://cs.fudan.edu.cn/"],
+    ["上海交大人工智能研究院","交","site:ai.sjtu.edu.cn","https://ai.sjtu.edu.cn/"],
+  ].map(([name, mark, query, homepage]) => newsSearch(name, mark, query, true, 2, homepage)),
+  ...[
+    ["Reuters Technology","RT","site:reuters.com/technology artificial intelligence","https://www.reuters.com/technology/"],
+    ["AP Technology","APN","site:apnews.com technology artificial intelligence","https://apnews.com/technology"],
+    ["Financial Times AI","FT","site:ft.com/artificial-intelligence","https://www.ft.com/artificial-intelligence"],
+    ["Bloomberg Technology","BB","site:bloomberg.com/technology artificial intelligence","https://www.bloomberg.com/technology"],
+    ["Nature Machine Intelligence","NMI","site:nature.com/natmachintell","https://www.nature.com/natmachintell/"],
+    ["Science AI","SCI","site:science.org artificial intelligence","https://www.science.org/"],
+    ["Stanford HAI","HAI","site:hai.stanford.edu news","https://hai.stanford.edu/news"],
+    ["Berkeley AI Research","BAIR","site:bair.berkeley.edu/blog","https://bair.berkeley.edu/blog/"],
+    ["Allen Institute for AI","AI2","site:allenai.org/news","https://allenai.org/news"],
+    ["Mozilla AI","MOZ","site:blog.mozilla.ai","https://blog.mozilla.ai/"],
+  ].map(([name, mark, query, homepage]) => newsSearch(name, mark, query, false, 2, homepage)),
 ];
 
 const decode = (value = "") => {
@@ -136,11 +170,30 @@ const field = (block: string, tag: string) => block.match(new RegExp(`<${tag}(?:
 const linkFor = (block: string, atom: boolean) => atom
   ? block.match(/<link[^>]+href=["']([^"']+)["']/i)?.[1] ?? ""
   : decode(field(block, "link"));
-const short = (value: string, max = 190) => {
-  const text = decode(value);
-  if (text.length <= max) return text || "点击查看这条资讯的完整内容。";
-  const cut = text.slice(0, max);
-  return `${cut.slice(0, Math.max(cut.lastIndexOf("。"), cut.lastIndexOf("，"), 120))}…`;
+const completeSentence = (value: string) => /[。！？.!?]$/.test(value) ? value : `${value}。`;
+const short = (value: string, max = 150) => {
+  const text = decode(value)
+    .replace(/^[·•\-–—\s]+/, "")
+    .replace(/#\S+/g, "")
+    .replace(/欢迎关注[\s\S]*$/i, "")
+    .replace(/(?:微信公众号|微信号|更多精彩内容)[\s\S]*$/i, "")
+    .replace(/\s+/g, " ").trim();
+  if (!text) return "这条资讯提供了新的 AI 行业动态，点击可查看完整原文。";
+  const sentences = text.match(/[^。！？.!?]+[。！？.!?]/g)?.map((item) => item.trim()).filter((item) => item.length >= 12) ?? [];
+  const selected = sentences.slice(0, 2).join("");
+  if (selected && selected.length <= max + 30) return selected;
+  const candidate = selected || text;
+  if (candidate.length <= max) return completeSentence(candidate);
+  const cut = candidate.slice(0, max);
+  const boundary = Math.max(cut.lastIndexOf("。"), cut.lastIndexOf("！"), cut.lastIndexOf("？"), cut.lastIndexOf("；"), cut.lastIndexOf("，"));
+  return completeSentence(cut.slice(0, boundary >= 70 ? boundary : max).replace(/[，；、\s]+$/, ""));
+};
+const cleanTitle = (value: string) => {
+  const text = decode(value).replace(/\s+/g, " ").trim();
+  if (text.length > 65 && (text.match(/[\/｜|]/g)?.length ?? 0) >= 2) {
+    return text.split(/[\/]/)[0].trim();
+  }
+  return text.length > 88 ? `${text.slice(0, 86).replace(/[，、；:\s]+$/, "")}…` : text;
 };
 const isAi = (text: string) => /人工智能|大模型|模型|智能体|机器人|算法|芯片|\bai\b|gpt|claude|gemini|deepseek|llm|agent/i.test(text);
 const categoryFor = (text: string) => /agent|智能体|copilot/i.test(text) ? "AI Agent"
@@ -169,7 +222,7 @@ async function fetchSource(source: Source): Promise<NewsItem[]> {
     const atom = source.type === "atom";
     const blocks = xml.match(atom ? /<entry\b[\s\S]*?<\/entry>/gi : /<item\b[\s\S]*?<\/item>/gi) ?? [];
     return blocks.slice(0, 18).map((block, index) => {
-      const title = decode(field(block, "title"));
+      const title = cleanTitle(field(block, "title"));
       const summary = short(field(block, atom ? "summary" : "description") || field(block, "content:encoded"));
       const text = `${title} ${summary}`;
       const publishedAt = decode(field(block, atom ? "published" : "pubDate") || field(block, "updated")) || new Date().toISOString();
