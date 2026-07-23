@@ -85,6 +85,7 @@ export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sourceQuery, setSourceQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState("全部来源");
+  const [sourcePage, setSourcePage] = useState(1);
   const [disabledSources, setDisabledSources] = useState<string[]>([]);
   const [subscribedTopics, setSubscribedTopics] = useState<string[]>([]);
   const [customTopics, setCustomTopics] = useState<string[]>(topicOptions);
@@ -249,6 +250,16 @@ export default function Home() {
     : "正在整理今天的核心趋势。系统会从最新资讯中提炼模型、产品与行业变化。关键事件将结合多来源信息交叉判断。请稍候片刻。";
   const dailyInsight = aiInsight || insight;
   const insightTranslationKey = `__insight:${dailyInsight}`;
+  const visibleInsight = contentLanguage === "en" ? translations[insightTranslationKey]?.summary ?? dailyInsight : dailyInsight;
+  const insightPoints = (visibleInsight.match(/[^。！？.!?]+[。！？.!?]?/g) ?? [visibleInsight]).map((item) => item.trim()).filter(Boolean).slice(0, 3);
+  const filteredSources = useMemo(() => sources.filter((source) =>
+    source.name.toLowerCase().includes(sourceQuery.toLowerCase())
+    && (sourceFilter === "全部来源" || sourceCategory(source) === sourceFilter)
+  ), [sourceFilter, sourceQuery, sources]);
+  const sourcePageSize = 12;
+  const sourceTotalPages = Math.max(1, Math.ceil(filteredSources.length / sourcePageSize));
+  const pagedSources = filteredSources.slice((sourcePage - 1) * sourcePageSize, sourcePage * sourcePageSize);
+  useEffect(() => setSourcePage(1), [sourceFilter, sourceQuery]);
   useEffect(() => {
     if (!stories.length) return;
     const controller = new AbortController();
@@ -289,7 +300,7 @@ export default function Home() {
     <aside className="sidebar">
       <button className="brand" onClick={() => setActive("今日资讯")} aria-label="返回首页">
         <span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M9.5 20A10.5 10.5 0 0 1 20 9.5" /><path d="M30.5 20A10.5 10.5 0 0 1 20 30.5" /><path className="outer" d="M5.5 20A14.5 14.5 0 0 1 20 5.5" /><path className="outer" d="M34.5 20A14.5 14.5 0 0 1 20 34.5" /><circle cx="20" cy="20" r="3.2" /></svg></span>
-        <span>AI Brief</span>
+        <span className="brand-copy"><b>AI Brief</b><small>SIGNAL INTELLIGENCE</small></span>
       </button>
       <p className="nav-label">探索</p>
       <nav>{nav.map((item) => <button key={item.label} className={active === item.label ? "active" : ""} onClick={() => setActive(item.label)}>
@@ -315,19 +326,25 @@ export default function Home() {
       </header>
 
       <div className="content page-stage" key={active}>
+        <section className="signal-banner">
+          <div className="banner-orbit"><i /><i /><span>✦</span></div>
+          <div><b>实时信号网络</b><small>DeepSeek 正在分析来自 {sources.length || 130} 个来源的最新动态</small></div>
+          <div className="banner-wave" aria-hidden="true">{Array.from({ length: 18 }).map((_, index) => <i key={index} />)}</div>
+          <span className="banner-live"><i /> LIVE</span>
+        </section>
         {(active === "今日资讯" || active === "我的收藏") && <>
           <section className="page-intro reveal">
-            <div><span className="eyebrow">AI SIGNAL DESK · {new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(new Date())}</span>
+            <div className="intro-heading"><div className="calendar-date"><strong>{new Date().getDate()}</strong><span>{new Intl.DateTimeFormat("zh-CN", { month: "short" }).format(new Date())}<small>{new Date().getFullYear()} · {new Intl.DateTimeFormat("zh-CN", { weekday: "short" }).format(new Date())}</small></span></div><div><span className="eyebrow">AI SIGNAL DESK</span>
               <h1>{active === "我的收藏" ? "我的收藏" : "今日资讯"}</h1>
-              <p>{active === "我的收藏" ? "你保存的高价值内容，随时回来继续阅读。" : "从海量动态中提炼值得关注、值得相信、值得行动的事件。"}</p>
+              <p>{active === "我的收藏" ? "你保存的高价值内容，随时回来继续阅读。" : "从海量动态中提炼值得关注、值得相信、值得行动的事件。"}</p></div>
             </div>
             <div className={`live-status ${loading || refreshing ? "working" : ""}`}><span /><b>{loading || refreshing ? syncStage : "实时更新"}</b><small>{updatedAt ? `最近同步 ${formatDate(updatedAt)}` : "准备同步"}</small></div>
           </section>
 
           {active === "今日资讯" && <section className="brief-hero reveal delay-1">
-            <div className="brief-copy"><span className="hero-kicker">✦ AI 总结</span><h2>{loading ? "快速读取多个可靠信号源…" : contentLanguage === "en" ? translations[insightTranslationKey]?.summary ?? dailyInsight : dailyInsight}</h2></div>
+            <div className="brief-copy"><span className="hero-kicker">✦ AI 总结</span>{loading ? <h2>快速读取多个可靠信号源…</h2> : <ul className="insight-points">{insightPoints.map((point, index) => <li key={`${index}-${point}`}><i>{index + 1}</i><span>{point}</span></li>)}</ul>}</div>
             <div className="trend-stack">
-              <span className="trend-title">今日核心趋势</span>
+              <span className="trend-title">今日重点</span>
               {topStories.slice(0, 3).map((story, i) => <button key={story.id} onClick={() => openStory(story)}><em>0{i + 1}</em><span>{displayed(story).title}</span><b>↗</b></button>)}
             </div>
           </section>}
@@ -341,9 +358,9 @@ export default function Home() {
               </span>)}<button className="add-topic" onClick={() => { setEditingTopic(""); setTopicDraft(""); }}>＋ 添加主题</button></div>
             </div>
             {editingTopic !== null && <div className="topic-editor"><input autoFocus value={topicDraft} onChange={(event) => setTopicDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveTopic(); }} placeholder="输入主题名称" maxLength={18} /><button onClick={saveTopic}>保存</button><button onClick={() => { setEditingTopic(null); setTopicDraft(""); }}>取消</button></div>}
-            <div className="filters">
-              <select value={importance} onChange={(e) => setImportance(e.target.value)} aria-label="重要程度"><option>全部级别</option><option>重要</option><option>关注</option><option>一般</option></select>
-              <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="排序"><option>综合排序</option><option>时间优先</option><option>多源提及优先</option></select>
+            <div className="smart-filters">
+              <div className="filter-group"><span>阅读优先级</span><div>{["全部级别","重要","关注","一般"].map((item) => <button key={item} className={importance === item ? "active" : ""} onClick={() => setImportance(item)}><i>{item === "全部级别" ? "◎" : item === "重要" ? "!" : item === "关注" ? "◉" : "○"}</i>{item === "全部级别" ? "全部" : item}</button>)}</div></div>
+              <div className="filter-group sort-group"><span>信息流排序</span><div>{[["综合排序","✦","为你精选"],["时间优先","↘","最新发布"],["多源提及优先","◎","多源验证"]].map(([value, icon, label]) => <button key={value} className={sort === value ? "active" : ""} onClick={() => setSort(value)} title={value}><i>{icon}</i>{label}</button>)}</div></div>
             </div>
           </section>
 
@@ -392,10 +409,8 @@ export default function Home() {
             const count = item === "全部来源" ? sources.length : sources.filter((source) => sourceCategory(source) === item).length;
             return <button key={item} className={sourceFilter === item ? "active" : ""} onClick={() => setSourceFilter(item)}>{item}<span>{count}</span></button>;
           })}</div>
-          <div className="source-tag-grid" key={`${sourceFilter}-${sourceQuery}`}>{sources.filter((source) =>
-            source.name.toLowerCase().includes(sourceQuery.toLowerCase())
-            && (sourceFilter === "全部来源" || sourceCategory(source) === sourceFilter)
-          ).map((source) => {
+          <div className="source-result-meta"><span><b>{filteredSources.length}</b> 个来源</span><span>第 {sourcePage} / {sourceTotalPages} 页</span></div>
+          <div className="source-tag-grid" key={`${sourceFilter}-${sourceQuery}-${sourcePage}`}>{pagedSources.map((source) => {
             const enabled = !disabledSources.includes(source.name);
             return <article className={`source-tag ${enabled ? "" : "disabled"}`} key={source.name}>
               <div className="source-tag-head"><span className="source-mark">{source.mark}</span><div><b>{source.name}</b><small>{sourceCategory(source)}</small></div>
@@ -405,13 +420,8 @@ export default function Home() {
               <div className="source-tag-meta"><span className={`health ${source.ok ? "ok" : ""}`}>{source.ok ? "在线" : "暂时不可用"}</span><span>{source.itemCount} 条内容</span><a href={source.homepage} target="_blank" rel="noreferrer">访问来源 ↗</a></div>
             </article>;
           })}</div>
+          {sourceTotalPages > 1 && <div className="pagination source-pagination"><button disabled={sourcePage === 1} onClick={() => setSourcePage((value) => value - 1)}>← 上一页</button><div>{Array.from({ length: sourceTotalPages }, (_, index) => index + 1).slice(Math.max(0, sourcePage - 3), Math.min(sourceTotalPages, sourcePage + 2)).map((item) => <button key={item} className={sourcePage === item ? "active" : ""} onClick={() => setSourcePage(item)}>{item}</button>)}</div><button disabled={sourcePage === sourceTotalPages} onClick={() => setSourcePage((value) => value + 1)}>下一页 →</button></div>}
         </section>}
-        <footer className="site-footer">
-          <div className="footer-orbit"><i /><i /><i /><span>✦</span></div>
-          <div><b>AI Brief</b><p>持续连接全球 AI 信号，由 DeepSeek 提炼为清晰、可核查的洞察。</p></div>
-          <div className="footer-wave" aria-hidden="true">{Array.from({ length: 14 }).map((_, index) => <i key={index} />)}</div>
-          <span className="footer-meta">130 SOURCES · LIVE INTELLIGENCE</span>
-        </footer>
       </div>
     </section>
 
