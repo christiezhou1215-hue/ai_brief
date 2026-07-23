@@ -34,6 +34,11 @@ const relative = (value: string) => {
 };
 const isEnglish = (story: Story) => !/[\u4e00-\u9fff]/.test(`${story.title}${story.summary}`);
 const oneSentence = (value = "") => value.match(/^[\s\S]*?[。！？.!?]/)?.[0]?.trim() || value.trim();
+const completeSummary = (value = "") => {
+  const text = value.replace(/\s*(?:\.{3,}|…+)\s*$/g, "").trim();
+  if (!text) return "原文暂未提供摘要，可进入详情查看已抓取的信息。";
+  return /[。！？.!?]$/.test(text) ? text : `${text}。`;
+};
 const sourceCategory = (source: SourceStatus) => {
   const name = source.name.toLowerCase();
   if (/arxiv|mit|research|研究院|实验室|lab|科学院|科学报|papers|stanford|berkeley|智源|之江/.test(name)) return "学术研究";
@@ -399,7 +404,7 @@ export default function Home() {
                   <button className={`save ${saved.includes(story.id) ? "saved" : ""}`} onClick={(e) => { e.stopPropagation(); toggleSaved(story.id); }} aria-label="收藏">{saved.includes(story.id) ? "♥" : "♡"}</button>
                 </div>
                 <div className="story-body"><div className="story-badges"><span>{story.category}</span><span className={`level ${story.level}`}>{story.level}</span></div>
-                  <h2>{translated.title}</h2><p>{translated.summary}</p>
+                  <h2>{translated.title}</h2><p>{completeSummary(translated.summary)}</p>
                 </div>
                 <div className="story-foot"><span>{story.related >= 3 ? <><b className="multi-source">{story.related} 个来源提及</b> · {story.sourceMentions.slice(0, 3).join("、")}</> : null}</span><button>阅读洞察 <i>→</i></button></div>
               </article>;})}
