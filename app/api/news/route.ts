@@ -280,16 +280,23 @@ const short = (value: string, max = 150) => {
   return completeSentence(cut.slice(0, boundary >= 55 ? boundary : max).replace(/[，；、\s]+$/, "").replace(/\s*(?:\.{3,}|…+)\s*$/, ""));
 };
 const cleanTitle = (value: string, sourceName = "") => {
-  let text = decode(value).replace(/\s+/g, " ").trim();
-  if (sourceName) {
-    const escaped = sourceName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let text = decode(value).replace(/(?:\.{3,}|…+)/g, " ").replace(/\s+/g, " ").trim();
+  const aliases = sourceName ? [
+    sourceName,
+    sourceName.replace(/\s*(?:科技|新闻|中文|AI|人工智能|开发者社区|开发者|研究院|实验室|学院)$/i, ""),
+  ].filter((name) => name.length >= 2) : [];
+  aliases.forEach((name) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     text = text.replace(new RegExp(`\\s*(?:[-—–_|｜]|·)\\s*${escaped}\\s*$`, "i"), "").trim();
-  }
-  text = text.replace(/\s*(?:[-—–_|｜]|·)\s*(?:阿里云开发者社区|腾讯云开发者社区|华为云开发者联盟|CSDN博客|掘金)\s*$/i, "").trim();
+  });
+  text = text
+    .replace(/\s*(?:[-—–_|｜]|·)\s*(?:阿里云开发者社区|腾讯云开发者社区|华为云开发者联盟|CSDN博客|掘金|光明网|新华网|人民网|中国新闻网|央视网|新浪科技|搜狐科技|网易科技|凤凰科技|澎湃新闻|极客公园|品玩|量子位|机器之心|雷峰网)\s*$/i, "")
+    .replace(/\s*(?:[-—–_|｜]|·)\s*(?:www\.)?[\w.-]+\.(?:com|cn|net|org)(?:\.cn)?\s*$/i, "")
+    .trim();
   if (text.length > 65 && (text.match(/[\/｜|]/g)?.length ?? 0) >= 2) {
     return text.split(/[\/]/)[0].trim();
   }
-  return text.length > 88 ? `${text.slice(0, 86).replace(/[，、；:\s]+$/, "")}…` : text;
+  return text;
 };
 const isAi = (text: string) => /人工智能|大模型|模型|智能体|机器人|算法|芯片|\bai\b|gpt|claude|gemini|deepseek|llm|agent/i.test(text);
 const categoryFor = (text: string) => /agent|智能体|copilot/i.test(text) ? "AI Agent"
