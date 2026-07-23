@@ -13,7 +13,8 @@ type SourceStatus = {
   trustScore: number; ok: boolean; itemCount: number;
 };
 type ChatMessage = { role: "user" | "assistant"; content: string; citations?: Array<{ title: string; source: string; url: string }> };
-type View = "cards" | "editorial" | "compact";
+type Translation = { title: string; summary: string; target: "zh" | "en" };
+type ArticleDetail = { title: string; description: string; imageUrl?: string; siteName?: string; author?: string; publishedAt?: string; aiSummary: string; keyPoints: string[] };
 
 const nav = [
   { icon: "✦", label: "今日资讯" },
@@ -44,12 +45,13 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("全部分类");
   const [importance, setImportance] = useState("全部级别");
-  const [trust, setTrust] = useState("全部可信度");
   const [sort, setSort] = useState("综合排序");
-  const [view, setView] = useState<View>("editorial");
-  const [language, setLanguage] = useState<"all" | "zh" | "en">("all");
   const [saved, setSaved] = useState<string[]>([]);
   const [selected, setSelected] = useState<Story | null>(null);
+  const [articleDetail, setArticleDetail] = useState<ArticleDetail | null>(null);
+  const [articleLoading, setArticleLoading] = useState(false);
+  const [translations, setTranslations] = useState<Record<string, Translation>>({});
+  const [translating, setTranslating] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
@@ -93,24 +95,49 @@ export default function Home() {
       return (!query || text.includes(query.toLowerCase()))
         && (category === "全部分类" || story.category === category)
         && (importance === "全部级别" || story.level === importance)
-        && (trust === "全部可信度" || story.trustLabel === trust)
-        && (language === "all" || (language === "en" ? isEnglish(story) : !isEnglish(story)))
         && (active !== "我的收藏" || saved.includes(story.id));
     });
     return result.sort((a, b) => sort === "时间优先"
       ? new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-      : sort === "可信度优先" ? b.trustScore - a.trustScore
       : sort === "多源提及优先" ? b.related - a.related
       : (b.score + b.trustScore * .35 + b.related * 4) - (a.score + a.trustScore * .35 + a.related * 4));
-  }, [stories, query, category, importance, trust, language, active, saved, sort]);
+  }, [stories, query, category, importance, active, saved, sort]);
 
   const topStories = filtered.slice(0, 5);
-  const pageSize = view === "compact" ? 18 : 12;
+  const pageSize = 12;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
-  useEffect(() => setPage(1), [query, category, importance, trust, language, active, sort, view]);
+  useEffect(() => setPage(1), [query, category, importance, active, sort]);
 
   const toggleSaved = (id: string) => setSaved((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id]);
+  const translateStory = async (story: Story) => {
+    if (translations[story.id]) {
+      setTranslations((items) => {
+        const next = { ...items };
+        delete next[story.id];
+        return next;
+      });
+      return;
+    }
+    setTranslating(story.id);
+    try {
+      const target = isEnglish(story) ? "zh" : "en";
+      const response = await fetch("/api/translate", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: story.title, summary: story.summary, target }),
+      });
+      const data = await response.json() as Translation;
+      if (data.title && data.summary) setTranslations((items) => ({ ...items, [story.id]: { ...data, target } }));
+    } finally { setTranslating(null); }
+  };
+  const openStory = (story: Story) => {
+    setSelected(story); setArticleDetail(null); setArticleLoading(true);
+    void fetch("/api/article", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: story.url, title: story.title, summary: story.summary }),
+    }).then((response) => response.json()).then((data: ArticleDetail) => setArticleDetail(data))
+      .catch(() => setArticleDetail(null)).finally(() => setArticleLoading(false));
+  };
   const ask = async (prompt = question) => {
     const text = prompt.trim();
     if (!text || asking) return;
@@ -127,9 +154,10 @@ export default function Home() {
     finally { setAsking(false); }
   };
 
+  const categories = [...new Set(topStories.map((story) => story.category))];
   const insight = topStories.length
-    ? `今日值得关注的 ${topStories[0].category} 动态正在升温。${topStories.filter((item) => item.related > 1).length ? "多家来源对部分主题形成交叉印证，" : ""}建议优先阅读高可信、被多源提及的内容。`
-    : "正在整理今日值得关注的 AI 动态。";
+    ? `今天的 AI 资讯主要集中在${categories.slice(0, 2).join("与")}。${topStories[0].source}等一手来源持续释放新的产品、模型与行业信号。${topStories.some((item) => item.related >= 3) ? "部分关键事件已获得三个以上独立来源交叉印证，市场关注度正在上升。" : "部分新动态仍处于早期披露阶段，需要结合后续进展持续观察。"}整体趋势显示，AI 正从模型能力竞争进一步走向产品落地、开发工具和行业应用。`
+    : "正在整理今天的核心趋势。系统会从最新资讯中提炼模型、产品与行业变化。关键事件将结合多来源信息交叉判断。请稍候片刻。";
 
   return <main className={`app-shell ${sidebarCollapsed ? "nav-collapsed" : ""}`}>
     <aside className="sidebar">
@@ -164,56 +192,46 @@ export default function Home() {
         {(active === "今日资讯" || active === "我的收藏") && <>
           <section className="page-intro reveal">
             <div><span className="eyebrow">AI SIGNAL DESK · {new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(new Date())}</span>
-              <h1>{active === "我的收藏" ? "我的收藏" : "今天，AI 世界发生了什么？"}</h1>
+              <h1>{active === "我的收藏" ? "我的收藏" : "今日资讯"}</h1>
               <p>{active === "我的收藏" ? "你保存的高价值内容，随时回来继续阅读。" : "从海量动态中提炼值得关注、值得相信、值得行动的信号。"}</p>
             </div>
             <div className="live-status"><span /><b>{loading ? "正在建立实时连接" : "实时更新"}</b><small>{updatedAt ? `最近同步 ${formatDate(updatedAt)}` : "准备同步"}</small></div>
           </section>
 
           {active === "今日资讯" && <section className="brief-hero reveal delay-1">
-            <div className="brief-copy"><span className="hero-kicker">✦ 今日 AI 一句话总结</span><h2>{loading ? "快速读取多个可靠信号源…" : insight}</h2>
-              <div className="hero-meta"><span>{stories.length} 条资讯</span><span>{sources.filter((item) => item.ok).length} 个有效来源</span><span>{stories.filter((item) => item.related > 1).length} 个多源事件</span></div>
-            </div>
+            <div className="brief-copy"><span className="hero-kicker">✦ 今日核心趋势</span><h2>{loading ? "快速读取多个可靠信号源…" : insight}</h2></div>
             <div className="trend-stack">
               <span className="trend-title">今日核心信号</span>
-              {topStories.slice(0, 3).map((story, i) => <button key={story.id} onClick={() => setSelected(story)}><em>0{i + 1}</em><span>{story.title}</span><b>↗</b></button>)}
+              {topStories.slice(0, 3).map((story, i) => <button key={story.id} onClick={() => openStory(story)}><em>0{i + 1}</em><span>{story.title}</span><b>↗</b></button>)}
             </div>
           </section>}
 
           <section className="control-deck reveal delay-2">
-            <div className="language-switch" aria-label="语言筛选">
-              <button className={language === "all" ? "active" : ""} onClick={() => setLanguage("all")}><b>全部内容</b><small>中英文资讯</small></button>
-              <button className={language === "zh" ? "active" : ""} onClick={() => setLanguage("zh")}><b>查看中文</b><small>中文原生内容</small></button>
-              <button className={language === "en" ? "active" : ""} onClick={() => setLanguage("en")}><b>查看英文</b><small>国际一手信源</small></button>
-            </div>
             <div className="filters">
               <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="分类"><option>全部分类</option>{["模型发布","AI Agent","AI 编程","多模态","开源项目","学术研究","行业动态"].map((x) => <option key={x}>{x}</option>)}</select>
               <select value={importance} onChange={(e) => setImportance(e.target.value)} aria-label="重要程度"><option>全部级别</option><option>重要</option><option>关注</option><option>一般</option></select>
-              <select value={trust} onChange={(e) => setTrust(e.target.value)} aria-label="来源可信度"><option>全部可信度</option><option>高可信</option><option>较可信</option><option>待核实</option></select>
-              <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="排序"><option>综合排序</option><option>时间优先</option><option>可信度优先</option><option>多源提及优先</option></select>
-              <div className="view-switch" aria-label="展示方式">
-                <button className={view === "editorial" ? "active" : ""} onClick={() => setView("editorial")} title="杂志视图">▦</button>
-                <button className={view === "cards" ? "active" : ""} onClick={() => setView("cards")} title="卡片视图">▥</button>
-                <button className={view === "compact" ? "active" : ""} onClick={() => setView("compact")} title="紧凑视图">☷</button>
-              </div>
+              <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="排序"><option>综合排序</option><option>时间优先</option><option>多源提及优先</option></select>
             </div>
           </section>
 
           {error && <div className="notice"><span>!</span><p>{error}</p><button onClick={() => void loadNews(true)}>立即重试</button></div>}
-          <div className="result-meta"><span><b>{filtered.length}</b> 条有效信号</span><span>当前视图 · {view === "editorial" ? "编辑精选" : view === "cards" ? "卡片浏览" : "高密度列表"}</span></div>
+          <div className="result-meta"><span><b>{filtered.length}</b> 条资讯</span></div>
 
           {loading ? <div className="skeleton-grid">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton" />)}</div>
-            : paged.length ? <section className={`story-grid ${view}`}>
-              {paged.map((story, index) => <article className={`story-card ${index === 0 && view === "editorial" ? "lead" : ""}`} key={story.id} onClick={() => setSelected(story)}>
+            : paged.length ? <section className="story-grid editorial">
+              {paged.map((story, index) => {
+                const translated = translations[story.id];
+                return <article className={`story-card ${index === 0 ? "lead" : ""}`} key={story.id} onClick={() => openStory(story)}>
                 <div className="story-head"><span className="source-mark">{story.sourceMark}</span><div><b>{story.source}</b><small>{relative(story.publishedAt)}</small></div>
                   <span className={`trust ${story.trustLabel}`}>● {story.trustLabel} {story.trustScore}</span>
+                  <button className="translate-btn" onClick={(e) => { e.stopPropagation(); void translateStory(story); }}>{translating === story.id ? "翻译中…" : translated ? "查看原文" : isEnglish(story) ? "译为中文" : "Translate"}</button>
                   <button className={`save ${saved.includes(story.id) ? "saved" : ""}`} onClick={(e) => { e.stopPropagation(); toggleSaved(story.id); }} aria-label="收藏">{saved.includes(story.id) ? "♥" : "♡"}</button>
                 </div>
                 <div className="story-body"><div className="story-badges"><span>{story.category}</span><span className={`level ${story.level}`}>{story.level}</span></div>
-                  <h2>{story.title}</h2><p>{story.summary}</p>
+                  <h2>{translated?.title ?? story.title}</h2><p>{translated?.summary ?? story.summary}</p>
                 </div>
-                <div className="story-foot"><span>{story.related > 1 ? <><b className="multi-source">{story.related} 个来源提及</b> · {story.sourceMentions.slice(0, 3).join("、")}</> : "单一来源 · 建议交叉验证"}</span><button>阅读洞察 <i>→</i></button></div>
-              </article>)}
+                <div className="story-foot"><span>{story.related >= 3 ? <><b className="multi-source">{story.related} 个来源提及</b> · {story.sourceMentions.slice(0, 3).join("、")}</> : null}</span><button>阅读洞察 <i>→</i></button></div>
+              </article>;})}
             </section> : <div className="empty"><span>◇</span><h3>没有符合条件的内容</h3><p>调整筛选条件，或刷新获取最新资讯。</p></div>}
 
           {totalPages > 1 && <div className="pagination"><button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>← 上一页</button><span>{page} / {totalPages}</span><button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>下一页 →</button></div>}
@@ -232,7 +250,7 @@ export default function Home() {
         {active === "数据源" && <section className="sources-page reveal">
           <div className="page-intro"><div><span className="eyebrow">SOURCE INTELLIGENCE</span><h1>数据源网络</h1><p>中文资讯优先，同时保留全球实验室、学术与科技媒体的一手信号。</p></div></div>
           <label className="source-search">⌕<input value={sourceQuery} onChange={(e) => setSourceQuery(e.target.value)} placeholder="搜索数据源…" /></label>
-          <div className="source-summary"><div><b>{sources.length}</b><span>数据源总数</span></div><div><b>{sources.filter((s) => s.chinese).length}</b><span>中文来源</span></div><div><b>{sources.filter((s) => s.ok).length}</b><span>当前在线</span></div><div><b>{Math.round(sources.reduce((n, s) => n + s.trustScore, 0) / (sources.length || 1))}</b><span>平均可信度</span></div></div>
+          <div className="source-summary"><div><b>{sources.length}</b><span>数据源总数</span></div><div><b>{sources.filter((s) => s.chinese).length}</b><span>中文来源</span></div><div><b>{sources.filter((s) => s.ok).length}</b><span>当前在线</span></div></div>
           <div className="source-list">{sources.filter((source) => source.name.toLowerCase().includes(sourceQuery.toLowerCase())).map((source) => <a href={source.homepage} target="_blank" rel="noreferrer" key={source.name}>
             <span className="source-mark">{source.mark}</span><div><b>{source.name}</b><small>{source.chinese ? "中文资讯" : "国际信源"} · {source.type.toUpperCase()}</small></div>
             <span className={`health ${source.ok ? "ok" : ""}`}>{source.ok ? "在线" : "暂时不可用"}</span><strong>{source.itemCount}<small>条内容</small></strong><i>↗</i>
@@ -246,11 +264,16 @@ export default function Home() {
       <div className="drawer-content">
         <div className="drawer-source"><span className="source-mark">{selected.sourceMark}</span><div><b>{selected.source}</b><small>{formatDate(selected.publishedAt)}</small></div><span className={`trust ${selected.trustLabel}`}>● {selected.trustLabel} {selected.trustScore}</span></div>
         <div className="story-badges"><span>{selected.category}</span><span className={`level ${selected.level}`}>{selected.level}</span></div>
-        <h2>{selected.title}</h2><p className="drawer-summary">{selected.summary}</p>
-        <section className="evidence-box"><span>可信度说明</span><h3>{selected.sourceMentions.length > 1 ? `${selected.sourceMentions.length} 个独立来源提及此事件` : "目前仅检测到单一来源"}</h3>
-          <div className="confidence-track"><i style={{ width: `${selected.trustScore}%` }} /></div><p>{selected.sourceMentions.join("、")} · 可信度评分 {selected.trustScore}/100</p>
+        {(articleDetail?.imageUrl || selected.imageUrl) && <img className="article-image" src={articleDetail?.imageUrl || selected.imageUrl} alt="" />}
+        <h2>{translations[selected.id]?.title ?? articleDetail?.title ?? selected.title}</h2>
+        <div className="original-meta"><span>{articleDetail?.siteName || selected.source}</span>{articleDetail?.author && <span>作者：{articleDetail.author}</span>}<span>{formatDate(articleDetail?.publishedAt || selected.publishedAt)}</span></div>
+        <button className="drawer-translate" onClick={() => void translateStory(selected)}>{translating === selected.id ? "翻译中…" : translations[selected.id] ? "查看原文" : isEnglish(selected) ? "译为中文" : "Translate to English"}</button>
+        <section className="drawer-section ai-summary"><span>AI 总结摘要</span>
+          {articleLoading ? <div className="summary-loading">正在读取原文并生成摘要…</div> : <p>{translations[selected.id]?.summary ?? articleDetail?.aiSummary ?? selected.summary}</p>}
+          {!!articleDetail?.keyPoints?.length && <ul>{articleDetail.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul>}
         </section>
-        <section className="drawer-section"><span>为什么值得关注</span><p>这条资讯在重要性、来源质量和时效性上的综合评分为 {selected.score}。{selected.related > 1 ? "多个来源的独立提及提高了事件的可验证性。" : "建议结合原文及后续报道继续判断。"}</p></section>
+        {selected.related >= 3 && <section className="evidence-box"><span>多源验证</span><h3>{selected.related} 个独立来源提及此事件</h3><p>{selected.sourceMentions.join("、")}</p></section>}
+        <section className="drawer-section"><span>原文信息</span><p>{articleDetail?.description ?? selected.summary}</p></section>
         <div className="drawer-actions"><button onClick={() => toggleSaved(selected.id)}>{saved.includes(selected.id) ? "♥ 已收藏" : "♡ 收藏"}</button><a href={selected.url} target="_blank" rel="noreferrer">阅读原文 ↗</a></div>
       </div>
     </aside></>}
