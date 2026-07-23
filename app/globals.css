@@ -227,26 +227,12 @@ body{background:
 .source-tags span{font-size:7px;font-weight:700;color:#60736b;background:#edf4f1;border:1px solid #e0ebe6;border-radius:999px;padding:4px 7px}
 .source-tag.disabled .source-tags span{background:#eef0ef}
 .source-tag-meta{margin-top:auto;padding-top:13px}
-.site-footer{min-height:190px;margin-top:70px;border-radius:22px;padding:35px 38px;position:relative;overflow:hidden;color:#d7ebe3;background:linear-gradient(135deg,#0d543f,#062f27);display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:24px;box-shadow:0 18px 45px rgba(7,49,38,.13)}
-.site-footer:before{content:"";position:absolute;inset:-80% 45% -80% -15%;background:repeating-radial-gradient(circle,transparent 0 32px,rgba(255,255,255,.035) 33px 34px);animation:footerDrift 24s linear infinite}
-.site-footer>div,.footer-meta{position:relative;z-index:1}
-.footer-orbit{width:70px;height:70px;border:1px solid rgba(255,255,255,.15);border-radius:50%;display:grid;place-items:center}
-.footer-orbit i{position:absolute;width:100%;height:100%;border-radius:50%;border:1px solid transparent;border-top-color:rgba(213,161,79,.7);animation:footerOrbit 5s linear infinite}
-.footer-orbit i:nth-child(2){width:50px;height:50px;animation-duration:7s;animation-direction:reverse;border-top-color:rgba(113,195,165,.7)}
-.footer-orbit i:nth-child(3){width:31px;height:31px;animation-duration:3.8s}
-.footer-orbit span{color:#fff;font-size:17px;animation:textBreathe 2s ease-in-out infinite}
-.site-footer b{display:block;color:#fff;font-family:"Noto Serif SC",serif;font-size:19px;letter-spacing:.2px}
-.site-footer p{font-size:9px;line-height:1.7;color:#9fc4b6;margin:8px 0 0;max-width:440px}
-.footer-wave{height:55px;display:flex;align-items:center;gap:4px}
-.footer-wave i{display:block;width:3px;height:12px;border-radius:5px;background:#77b69f;animation:waveBar 1.45s ease-in-out infinite}
-.footer-wave i:nth-child(3n){animation-delay:.18s}.footer-wave i:nth-child(3n+1){animation-delay:.36s}.footer-wave i:nth-child(4n){animation-delay:.52s}
-.footer-meta{position:absolute;right:38px;bottom:24px;font-size:7px;letter-spacing:1.4px;color:#70998a}
 @keyframes logoSignal{50%{opacity:.55;transform:scale(.75)}}
 @keyframes logoOrbit{50%{transform:rotate(4deg)}}
 @keyframes footerDrift{to{transform:rotate(360deg)}}
 @keyframes footerOrbit{to{transform:rotate(360deg)}}
 @keyframes waveBar{0%,100%{height:10px;opacity:.45}50%{height:42px;opacity:1}}
-@media(max-width:720px){.source-tag-grid{grid-template-columns:1fr}.site-footer{grid-template-columns:auto 1fr;padding:28px 22px;min-height:165px}.footer-wave{display:none}.footer-meta{right:22px;bottom:18px}.footer-orbit{width:54px;height:54px}}
+@media(max-width:720px){.source-tag-grid{grid-template-columns:1fr}}
 
 /* Information architecture refinements */
 .brand{gap:10px;margin:0 2px 25px;padding:7px 8px;border:1px solid #e0e9e5;border-radius:16px;background:linear-gradient(145deg,#fff,#f4f8f6);box-shadow:0 7px 22px rgba(18,70,55,.05)}
