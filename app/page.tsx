@@ -42,6 +42,14 @@ const sourceCategory = (source: SourceStatus) => {
   return source.chinese ? "中文科技媒体" : "国际科技媒体";
 };
 const sourceCategories = ["全部来源", "中文科技媒体", "官方与实验室", "学术研究", "开发者社区", "国际科技媒体"];
+const topicOptions = ["模型发布", "AI Agent", "AI 编程", "中国 AI", "融资", "多模态", "开源项目"];
+const matchesTopic = (story: Story, topic: string) => {
+  const text = `${story.title} ${story.summary} ${story.category} ${story.tags.join(" ")}`.toLowerCase();
+  if (topic === "中国 AI") return story.tags.includes("中文") || /中国|国产|北京|上海|深圳|杭州|deepseek|智谱|通义|千问|文心|豆包/.test(text);
+  if (topic === "融资") return /融资|投资|估值|收购|ipo|funding|investment|valuation|acquisition/.test(text);
+  if (topic === "开源项目") return story.category === "开源项目" || /开源|open.?source|github/.test(text);
+  return story.category === topic;
+};
 const AnswerContent = ({ content }: { content: string }) => <div className="answer-content">
   {content.split("\n").map((line, index) => {
     const text = line.trim();
@@ -79,6 +87,7 @@ export default function Home() {
   const [sourceQuery, setSourceQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState("全部来源");
   const [disabledSources, setDisabledSources] = useState<string[]>([]);
+  const [subscribedTopics, setSubscribedTopics] = useState<string[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const loadNews = useCallback(async (manual = false, disabledOverride?: string[]) => {
@@ -114,11 +123,14 @@ export default function Home() {
     setDisabledSources(disabledList);
     const cachedTranslations = window.localStorage.getItem("ai-brief-translations");
     if (cachedTranslations) setTranslations(JSON.parse(cachedTranslations));
+    const topics = window.localStorage.getItem("ai-brief-topics");
+    if (topics) setSubscribedTopics(JSON.parse(topics));
     void loadNews(false, disabledList);
   }, [loadNews]);
   useEffect(() => { window.localStorage.setItem("ai-brief-saved", JSON.stringify(saved)); }, [saved]);
   useEffect(() => { window.localStorage.setItem("ai-brief-disabled-sources", JSON.stringify(disabledSources)); }, [disabledSources]);
   useEffect(() => { window.localStorage.setItem("ai-brief-translations", JSON.stringify(translations)); }, [translations]);
+  useEffect(() => { window.localStorage.setItem("ai-brief-topics", JSON.stringify(subscribedTopics)); }, [subscribedTopics]);
 
   const filtered = useMemo(() => {
     const result = stories.filter((story) => {
@@ -129,11 +141,12 @@ export default function Home() {
         && !disabledSources.includes(story.source)
         && (active !== "我的收藏" || saved.includes(story.id));
     });
+    const topicBoost = (story: Story) => active === "今日资讯" && subscribedTopics.some((topic) => matchesTopic(story, topic)) ? 1_000 : 0;
     return result.sort((a, b) => sort === "时间优先"
       ? new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
       : sort === "多源提及优先" ? b.related - a.related
-      : (b.score + b.trustScore * .35 + b.related * 4) - (a.score + a.trustScore * .35 + a.related * 4));
-  }, [stories, query, category, importance, disabledSources, active, saved, sort]);
+      : (topicBoost(b) + b.score + b.trustScore * .35 + b.related * 4) - (topicBoost(a) + a.score + a.trustScore * .35 + a.related * 4));
+  }, [stories, query, category, importance, disabledSources, active, saved, sort, subscribedTopics]);
 
   const topStories = filtered.slice(0, 5);
   const pageSize = 12;
@@ -147,6 +160,7 @@ export default function Home() {
     setDisabledSources(next);
     void loadNews(true, next);
   };
+  const toggleTopic = (topic: string) => setSubscribedTopics((items) => items.includes(topic) ? items.filter((item) => item !== topic) : [...items, topic]);
   const displayed = (story: Story) => {
     const originalMatches = contentLanguage === "en" ? isEnglish(story) : !isEnglish(story);
     const translated = translations[story.id];
@@ -278,6 +292,12 @@ export default function Home() {
           </section>}
 
           <section className="control-deck reveal delay-2">
+            <div className="topic-subscriptions">
+              <div><span>关注主题</span><small>{subscribedTopics.length ? `已关注 ${subscribedTopics.length} 个主题，相关资讯将优先展示` : "选择你关心的方向，定制首页信息流"}</small></div>
+              <div className="topic-chips">{topicOptions.map((topic) => <button key={topic} className={subscribedTopics.includes(topic) ? "active" : ""} onClick={() => toggleTopic(topic)}>
+                <i>{subscribedTopics.includes(topic) ? "✓" : "+"}</i>{topic}
+              </button>)}</div>
+            </div>
             <div className="filters">
               <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="分类"><option>全部分类</option>{["模型发布","AI Agent","AI 编程","多模态","开源项目","学术研究","行业动态"].map((x) => <option key={x}>{x}</option>)}</select>
               <select value={importance} onChange={(e) => setImportance(e.target.value)} aria-label="重要程度"><option>全部级别</option><option>重要</option><option>关注</option><option>一般</option></select>
@@ -300,7 +320,6 @@ export default function Home() {
                 const translated = displayed(story);
                 return <article className={`story-card ${index === 0 ? "lead" : ""}`} key={story.id} onClick={() => openStory(story)}>
                 <div className="story-head"><span className="source-mark">{story.sourceMark}</span><div><b>{story.source}</b><small>{relative(story.publishedAt)}</small></div>
-                  <span className={`trust ${story.trustLabel}`}>● {story.trustLabel} {story.trustScore}</span>
                   <button className={`save ${saved.includes(story.id) ? "saved" : ""}`} onClick={(e) => { e.stopPropagation(); toggleSaved(story.id); }} aria-label="收藏">{saved.includes(story.id) ? "♥" : "♡"}</button>
                 </div>
                 <div className="story-body"><div className="story-badges"><span>{story.category}</span><span className={`level ${story.level}`}>{story.level}</span></div>
@@ -350,7 +369,7 @@ export default function Home() {
     {selected && <><button className="backdrop" onClick={() => setSelected(null)} aria-label="关闭详情" /><aside className="drawer">
       <div className="drawer-head"><span>AI Brief · 内容洞察</span><button onClick={() => setSelected(null)}>×</button></div>
       <div className="drawer-content">
-        <div className="drawer-source"><span className="source-mark">{selected.sourceMark}</span><div><b>{selected.source}</b><small>{formatDate(selected.publishedAt)}</small></div><span className={`trust ${selected.trustLabel}`}>● {selected.trustLabel} {selected.trustScore}</span></div>
+        <div className="drawer-source"><span className="source-mark">{selected.sourceMark}</span><div><b>{selected.source}</b><small>{formatDate(selected.publishedAt)}</small></div></div>
         <div className="story-badges"><span>{selected.category}</span><span className={`level ${selected.level}`}>{selected.level}</span></div>
         {(articleDetail?.imageUrl || selected.imageUrl) && <img className="article-image" src={articleDetail?.imageUrl || selected.imageUrl} alt="" onError={(event) => { event.currentTarget.hidden = true; }} />}
         <h2>{displayed(selected).title || articleDetail?.title || selected.title}</h2>
