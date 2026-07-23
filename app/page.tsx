@@ -361,7 +361,7 @@ export default function Home() {
       <div className="content page-stage" key={active}>
         {(active === "今日资讯" || active === "我的收藏") && <>
           <section className="page-intro reveal">
-            <div className="intro-heading">{active === "今日资讯" && <time className="calendar-date"><i>▦</i><span><small>今日</small>{new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric" }).format(new Date())}</span><b>{new Intl.DateTimeFormat("zh-CN", { weekday: "long" }).format(new Date())}</b></time>}<div><span className="eyebrow">AI SIGNAL DESK</span>
+            <div className="intro-heading">{active === "今日资讯" && <time className="calendar-date"><span className="calendar-month">{new Intl.DateTimeFormat("zh-CN", { month: "short" }).format(new Date())}</span><strong>{new Intl.DateTimeFormat("zh-CN", { day: "numeric" }).format(new Date())}</strong><span className="calendar-meta"><b>今日</b><small>{new Intl.DateTimeFormat("zh-CN", { weekday: "long" }).format(new Date())}</small></span></time>}<div className="intro-copy"><span className="eyebrow">AI SIGNAL DESK</span>
               <h1>{active === "我的收藏" ? "我的收藏" : "今日资讯"}</h1>
               <p>{active === "我的收藏" ? "你保存的高价值内容，随时回来继续阅读。" : "从海量动态中提炼值得关注、值得相信、值得行动的事件。"}</p></div>
             </div>
