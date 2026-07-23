@@ -60,7 +60,8 @@ export default function Home() {
   const [articleDetail, setArticleDetail] = useState<ArticleDetail | null>(null);
   const [articleLoading, setArticleLoading] = useState(false);
   const [translations, setTranslations] = useState<Record<string, Translation>>({});
-  const [translating, setTranslating] = useState<string | null>(null);
+  const [contentLanguage, setContentLanguage] = useState<"zh" | "en">("zh");
+  const [pageTranslating, setPageTranslating] = useState(false);
   const [page, setPage] = useState(1);
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
@@ -126,25 +127,10 @@ export default function Home() {
 
   const toggleSaved = (id: string) => setSaved((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id]);
   const toggleSource = (name: string) => setDisabledSources((items) => items.includes(name) ? items.filter((item) => item !== name) : [...items, name]);
-  const translateStory = async (story: Story) => {
-    if (translations[story.id]) {
-      setTranslations((items) => {
-        const next = { ...items };
-        delete next[story.id];
-        return next;
-      });
-      return;
-    }
-    setTranslating(story.id);
-    try {
-      const target = isEnglish(story) ? "zh" : "en";
-      const response = await fetch("/api/translate", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: story.title, summary: story.summary, target }),
-      });
-      const data = await response.json() as Translation;
-      if (data.title && data.summary) setTranslations((items) => ({ ...items, [story.id]: { ...data, target } }));
-    } finally { setTranslating(null); }
+  const displayed = (story: Story) => {
+    const originalMatches = contentLanguage === "en" ? isEnglish(story) : !isEnglish(story);
+    const translated = translations[story.id];
+    return !originalMatches && translated?.target === contentLanguage ? translated : { title: story.title, summary: story.summary };
   };
   const openStory = (story: Story) => {
     setSelected(story); setArticleDetail(null); setArticleLoading(true);
@@ -186,6 +172,30 @@ export default function Home() {
   const insight = topStories.length
     ? `今天的 AI 资讯主要集中在${categories.slice(0, 2).join("与")}。${topStories[0].source}等一手来源持续释放新的产品、模型与行业信号。${topStories.some((item) => item.related >= 3) ? "部分关键事件已获得三个以上独立来源交叉印证，市场关注度正在上升。" : "部分新动态仍处于早期披露阶段，需要结合后续进展持续观察。"}整体趋势显示，AI 正从模型能力竞争进一步走向产品落地、开发工具和行业应用。`
     : "正在整理今天的核心趋势。系统会从最新资讯中提炼模型、产品与行业变化。关键事件将结合多来源信息交叉判断。请稍候片刻。";
+  useEffect(() => {
+    if (loading || pageTranslating || !paged.length) return;
+    const candidates = [...new Map([...paged, ...topStories].map((story) => [story.id, story])).values()]
+      .filter((story) => contentLanguage === "zh" ? isEnglish(story) : !isEnglish(story))
+      .filter((story) => translations[story.id]?.target !== contentLanguage);
+    const needsInsight = contentLanguage === "en" && translations.__insight?.target !== "en";
+    if (!candidates.length && !needsInsight) return;
+    setPageTranslating(true);
+    const items = [
+      ...candidates.map((story) => ({ id: story.id, title: story.title, summary: story.summary })),
+      ...(needsInsight ? [{ id: "__insight", title: "今日 AI 总结", summary: insight }] : []),
+    ];
+    void fetch("/api/translate", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ items, target: contentLanguage }),
+    }).then((response) => response.json()).then((data: { translations?: Array<{ id: string; title: string; summary: string }> }) => {
+      if (!data.translations?.length) return;
+      setTranslations((current) => {
+        const next = { ...current };
+        data.translations?.forEach((item) => { next[item.id] = { title: item.title, summary: item.summary, target: contentLanguage }; });
+        return next;
+      });
+    }).finally(() => setPageTranslating(false));
+  }, [active, contentLanguage, insight, loading, page, pageTranslating, paged, topStories, translations]);
 
   return <main className={`app-shell ${sidebarCollapsed ? "nav-collapsed" : ""}`}>
     <aside className="sidebar">
@@ -227,10 +237,10 @@ export default function Home() {
           </section>
 
           {active === "今日资讯" && <section className="brief-hero reveal delay-1">
-            <div className="brief-copy"><span className="hero-kicker">✦ AI 总结</span><h2>{loading ? "快速读取多个可靠信号源…" : insight}</h2></div>
+            <div className="brief-copy"><span className="hero-kicker">✦ AI 总结</span><h2>{loading ? "快速读取多个可靠信号源…" : contentLanguage === "en" ? translations.__insight?.summary ?? insight : insight}</h2></div>
             <div className="trend-stack">
               <span className="trend-title">今日核心趋势</span>
-              {topStories.slice(0, 3).map((story, i) => <button key={story.id} onClick={() => openStory(story)}><em>0{i + 1}</em><span>{story.title}</span><b>↗</b></button>)}
+              {topStories.slice(0, 3).map((story, i) => <button key={story.id} onClick={() => openStory(story)}><em>0{i + 1}</em><span>{displayed(story).title}</span><b>↗</b></button>)}
             </div>
           </section>}
 
@@ -243,20 +253,25 @@ export default function Home() {
           </section>
 
           {error && <div className="notice"><span>!</span><p>{error}</p><button onClick={() => void loadNews(true)}>立即重试</button></div>}
-          <div className="result-meta"><span><b>{filtered.length}</b> 条资讯</span></div>
+          <div className="result-meta"><span><b>{filtered.length}</b> 条资讯</span>
+            <div className={`page-language ${pageTranslating ? "loading" : ""}`} aria-label="页面语言">
+              <button className={contentLanguage === "zh" ? "active" : ""} onClick={() => setContentLanguage("zh")}>中文</button>
+              <button className={contentLanguage === "en" ? "active" : ""} onClick={() => setContentLanguage("en")}>EN</button>
+              {pageTranslating && <span>翻译中…</span>}
+            </div>
+          </div>
 
           {loading ? <div className="skeleton-grid">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton" />)}</div>
             : paged.length ? <section className="story-grid editorial">
               {paged.map((story, index) => {
-                const translated = translations[story.id];
+                const translated = displayed(story);
                 return <article className={`story-card ${index === 0 ? "lead" : ""}`} key={story.id} onClick={() => openStory(story)}>
                 <div className="story-head"><span className="source-mark">{story.sourceMark}</span><div><b>{story.source}</b><small>{relative(story.publishedAt)}</small></div>
                   <span className={`trust ${story.trustLabel}`}>● {story.trustLabel} {story.trustScore}</span>
-                  <button className="translate-btn" onClick={(e) => { e.stopPropagation(); void translateStory(story); }}>{translating === story.id ? "翻译中…" : translated ? "查看原文" : isEnglish(story) ? "译为中文" : "Translate"}</button>
                   <button className={`save ${saved.includes(story.id) ? "saved" : ""}`} onClick={(e) => { e.stopPropagation(); toggleSaved(story.id); }} aria-label="收藏">{saved.includes(story.id) ? "♥" : "♡"}</button>
                 </div>
                 <div className="story-body"><div className="story-badges"><span>{story.category}</span><span className={`level ${story.level}`}>{story.level}</span></div>
-                  <h2>{translated?.title ?? story.title}</h2><p>{translated?.summary ?? story.summary}</p>
+                  <h2>{translated.title}</h2><p>{translated.summary}</p>
                 </div>
                 <div className="story-foot"><span>{story.related >= 3 ? <><b className="multi-source">{story.related} 个来源提及</b> · {story.sourceMentions.slice(0, 3).join("、")}</> : null}</span><button>阅读洞察 <i>→</i></button></div>
               </article>;})}
@@ -305,11 +320,10 @@ export default function Home() {
         <div className="drawer-source"><span className="source-mark">{selected.sourceMark}</span><div><b>{selected.source}</b><small>{formatDate(selected.publishedAt)}</small></div><span className={`trust ${selected.trustLabel}`}>● {selected.trustLabel} {selected.trustScore}</span></div>
         <div className="story-badges"><span>{selected.category}</span><span className={`level ${selected.level}`}>{selected.level}</span></div>
         {(articleDetail?.imageUrl || selected.imageUrl) && <img className="article-image" src={articleDetail?.imageUrl || selected.imageUrl} alt="" />}
-        <h2>{translations[selected.id]?.title ?? articleDetail?.title ?? selected.title}</h2>
+        <h2>{displayed(selected).title || articleDetail?.title || selected.title}</h2>
         <div className="original-meta"><span>{articleDetail?.siteName || selected.source}</span>{articleDetail?.author && <span>作者：{articleDetail.author}</span>}<span>{formatDate(articleDetail?.publishedAt || selected.publishedAt)}</span></div>
-        <button className="drawer-translate" onClick={() => void translateStory(selected)}>{translating === selected.id ? "翻译中…" : translations[selected.id] ? "查看原文" : isEnglish(selected) ? "译为中文" : "Translate to English"}</button>
         <section className="drawer-section ai-summary"><span>AI 总结摘要</span>
-          {articleLoading ? <div className="summary-loading">正在读取原文并生成摘要…</div> : <p>{translations[selected.id]?.summary ?? articleDetail?.aiSummary ?? selected.summary}</p>}
+          {articleLoading ? <div className="summary-loading">正在读取原文并生成摘要…</div> : <p>{displayed(selected).summary || articleDetail?.aiSummary || selected.summary}</p>}
           {!!articleDetail?.keyPoints?.length && <ul>{articleDetail.keyPoints.map((point) => {
             const sentence = oneSentence(point);
             return sentence ? <li key={point}><strong>{sentence}</strong></li> : null;
