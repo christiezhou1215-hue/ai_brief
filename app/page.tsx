@@ -93,6 +93,7 @@ export default function Home() {
   const [topicDraft, setTopicDraft] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [motionEnabled, setMotionEnabled] = useState(true);
+  const [referenceNews, setReferenceNews] = useState(true);
   const [syncStage, setSyncStage] = useState("连接数据源");
   const [askStage, setAskStage] = useState("读取实时资讯");
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -135,6 +136,7 @@ export default function Home() {
     const custom = window.localStorage.getItem("ai-brief-custom-topics");
     if (custom) setCustomTopics(JSON.parse(custom));
     setMotionEnabled(window.localStorage.getItem("ai-brief-motion") !== "off");
+    setReferenceNews(window.localStorage.getItem("ai-brief-reference-news") !== "false");
     void loadNews(false, disabledList);
   }, [loadNews]);
   useEffect(() => { window.localStorage.setItem("ai-brief-saved", JSON.stringify(saved)); }, [saved]);
@@ -143,6 +145,7 @@ export default function Home() {
   useEffect(() => { window.localStorage.setItem("ai-brief-topics", JSON.stringify(subscribedTopics)); }, [subscribedTopics]);
   useEffect(() => { window.localStorage.setItem("ai-brief-custom-topics", JSON.stringify(customTopics)); }, [customTopics]);
   useEffect(() => { window.localStorage.setItem("ai-brief-motion", motionEnabled ? "on" : "off"); }, [motionEnabled]);
+  useEffect(() => { window.localStorage.setItem("ai-brief-reference-news", String(referenceNews)); }, [referenceNews]);
   useEffect(() => {
     if (!loading && !refreshing) return;
     setSyncStage("连接数据源");
@@ -239,7 +242,7 @@ export default function Home() {
     try {
       const response = await fetch("/api/ask", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ question: text, history: next, context: stories.slice(0, 160) }),
+        body: JSON.stringify({ question: text, history: next, context: referenceNews ? stories.slice(0, 160) : [], referenceNews }),
       });
       const data = await response.json() as { answer?: string; citations?: ChatMessage["citations"]; followUps?: string[]; error?: string };
       setMessages((items) => [...items, { role: "assistant", content: data.answer ?? data.error ?? "暂时无法回答。", citations: data.citations, followUps: data.followUps }]);
@@ -402,14 +405,16 @@ export default function Home() {
         </>}
 
         {active === "AI 问答" && <section className="ask-page reveal">
-          <div className="ask-header"><span className="ask-orb">✦</span><span className="eyebrow">AI BRIEF RESEARCH ASSISTANT</span><h1>从资讯中，找到答案</h1><p>基于当前抓取的新闻、历史上下文与实时补充检索进行回答，并附上可核查的出处。</p></div>
+          <div className="ask-header"><span className="ask-orb">✦</span><span className="eyebrow">AI BRIEF RESEARCH ASSISTANT</span><h1>问清正在发生的 AI</h1><p>把新闻线索、对话背景与公开信息连接起来，给出清晰判断和可核查出处。</p>
+            <button className={`research-source-switch ${referenceNews ? "on" : ""}`} onClick={() => setReferenceNews((value) => !value)} role="switch" aria-checked={referenceNews}><i /><span><b>参考 AI 资讯</b><small>{referenceNews ? "已连接资讯库与实时检索" : "仅使用对话上下文与模型知识"}</small></span></button>
+          </div>
           {!messages.length && <div className="suggestions">{["今天最重要的 AI 变化是什么？","最近有哪些新模型发布？","哪些新闻得到了多个来源印证？","总结中国 AI 行业近期趋势"].map((item) => <button key={item} onClick={() => void ask(item)}><span>↗</span>{item}</button>)}</div>}
           <div className="chat-stream">{messages.map((message, index) => <div className={`message ${message.role}`} key={index}>
             <span className="avatar">{message.role === "user" ? "你" : "✦"}</span><div>{message.role === "assistant" ? <AnswerContent content={message.content} /> : <p>{message.content}</p>}
               {message.citations?.length ? <div className="citations">{message.citations.map((citation) => <a key={citation.url} href={citation.url} target="_blank" rel="noreferrer"><b>{citation.source}</b><span>{citation.title}</span>↗</a>)}</div> : null}
               {message.role === "assistant" && message.followUps?.length ? <div className="follow-ups"><span>继续研究</span>{message.followUps.map((item) => <button key={item} onClick={() => void ask(item)} disabled={asking}><i>↗</i>{item}</button>)}</div> : null}
             </div></div>)}{asking && <div className="message assistant generating"><span className="avatar">✦</span><div className="thinking"><span>{askStage}</span><div><i /><i /><i /></div><b><em /></b></div></div>}<div ref={chatEndRef} /></div>
-          <div className="ask-composer"><textarea value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(); } }} placeholder="问任何关于 AI 行业、产品、模型或趋势的问题…" /><div><span>回答将优先引用当前资讯 · Enter 发送</span><button onClick={() => void ask()} disabled={!question.trim() || asking}>发送 <b>↑</b></button></div></div>
+          <div className="ask-composer"><textarea value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(); } }} placeholder="问任何关于 AI 行业、产品、模型或趋势的问题…" /><div><span>{referenceNews ? "正在参考资讯库与公开信息" : "当前不参考资讯库"} · Enter 发送</span><button onClick={() => void ask()} disabled={!question.trim() || asking}>发送 <b>↑</b></button></div></div>
         </section>}
 
         {active === "数据源" && <section className="sources-page reveal">
