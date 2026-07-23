@@ -321,14 +321,15 @@ export default function Home() {
       <nav>{nav.map((item) => <button key={item.label} className={active === item.label ? "active" : ""} onClick={() => setActive(item.label)}>
         <span className="nav-icon">{item.icon}</span><span>{item.label}</span>
       </button>)}</nav>
+      <button className={`settings-entry ${active === "设置" ? "active" : ""}`} onClick={() => setActive("设置")}><span className="nav-icon">⚙</span><span>设置</span></button>
+      <button className="source-pulse" onClick={() => setActive("数据源")} aria-label="查看数据源状态">
+        <span className="pulse-dot" />
+        <div><b>{sources.filter((item) => item.ok).length}/{sources.length || "—"} 数据源在线</b><small>实时信号监测</small></div>
+        <i>→</i>
+      </button>
       <button className="collapse-nav" onClick={() => setSidebarCollapsed((value) => !value)} aria-label={sidebarCollapsed ? "展开导航栏" : "收起导航栏"}>
         <span>{sidebarCollapsed ? "›" : "‹"}</span><b>{sidebarCollapsed ? "展开" : "收起导航"}</b>
       </button>
-      <div className="source-pulse">
-        <span className="pulse-dot" />
-        <div><b>{sources.filter((item) => item.ok).length}/{sources.length || "—"} 数据源在线</b><small>实时信号监测</small></div>
-      </div>
-      <button className={`settings-entry ${active === "设置" ? "active" : ""}`} onClick={() => setActive("设置")}><span className="nav-icon">⚙</span><span>设置</span></button>
     </aside>
 
     <section className="workspace">
