@@ -288,7 +288,7 @@ export default function Home() {
   return <main className={`app-shell ${sidebarCollapsed ? "nav-collapsed" : ""}`}>
     <aside className="sidebar">
       <button className="brand" onClick={() => setActive("今日资讯")} aria-label="返回首页">
-        <span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M10 28 19.3 9.5a1 1 0 0 1 1.8 0L30 28" /><path d="M14.5 21.5h11" /><circle cx="29.5" cy="10.5" r="2.3" /></svg></span>
+        <span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M9.5 20A10.5 10.5 0 0 1 20 9.5" /><path d="M30.5 20A10.5 10.5 0 0 1 20 30.5" /><path className="outer" d="M5.5 20A14.5 14.5 0 0 1 20 5.5" /><path className="outer" d="M34.5 20A14.5 14.5 0 0 1 20 34.5" /><circle cx="20" cy="20" r="3.2" /></svg></span>
         <span>AI Brief</span>
       </button>
       <p className="nav-label">探索</p>
