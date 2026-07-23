@@ -18,7 +18,7 @@ type ArticleDetail = { title: string; description: string; imageUrl?: string; si
 
 const nav = [
   { icon: "✦", label: "今日资讯" },
-  { icon: "✧", label: "AI 问答", badge: "NEW" },
+  { icon: "✧", label: "AI 问答" },
   { icon: "♡", label: "我的收藏" },
   { icon: "◉", label: "数据源" },
 ];
@@ -33,6 +33,7 @@ const relative = (value: string) => {
   return `${Math.round(diff / 86_400_000)} 天前`;
 };
 const isEnglish = (story: Story) => !/[\u4e00-\u9fff]/.test(`${story.title}${story.summary}`);
+const oneSentence = (value = "") => value.match(/^[\s\S]*?[。！？.!?]/)?.[0]?.trim() || value.trim();
 
 export default function Home() {
   const [active, setActive] = useState("今日资讯");
@@ -174,12 +175,12 @@ export default function Home() {
   return <main className={`app-shell ${sidebarCollapsed ? "nav-collapsed" : ""}`}>
     <aside className="sidebar">
       <button className="brand" onClick={() => setActive("今日资讯")} aria-label="返回首页">
-        <span className="brand-mark"><b>A</b><i /><i /></span>
-        <span>AI Brief<small>信号，不是噪音</small></span>
+        <span className="brand-mark"><b>AI</b><i /></span>
+        <span>AI Brief</span>
       </button>
       <p className="nav-label">探索</p>
       <nav>{nav.map((item) => <button key={item.label} className={active === item.label ? "active" : ""} onClick={() => setActive(item.label)}>
-        <span className="nav-icon">{item.icon}</span><span>{item.label}</span>{item.badge && <em>{item.badge}</em>}
+        <span className="nav-icon">{item.icon}</span><span>{item.label}</span>
       </button>)}</nav>
       <button className="collapse-nav" onClick={() => setSidebarCollapsed((value) => !value)} aria-label={sidebarCollapsed ? "展开导航栏" : "收起导航栏"}>
         <span>{sidebarCollapsed ? "›" : "‹"}</span><b>{sidebarCollapsed ? "展开" : "收起导航"}</b>
@@ -211,9 +212,9 @@ export default function Home() {
           </section>
 
           {active === "今日资讯" && <section className="brief-hero reveal delay-1">
-            <div className="brief-copy"><span className="hero-kicker">✦ 今日核心趋势</span><h2>{loading ? "快速读取多个可靠信号源…" : insight}</h2></div>
+            <div className="brief-copy"><span className="hero-kicker">✦ AI 总结</span><h2>{loading ? "快速读取多个可靠信号源…" : insight}</h2></div>
             <div className="trend-stack">
-              <span className="trend-title">今日核心信号</span>
+              <span className="trend-title">今日核心趋势</span>
               {topStories.slice(0, 3).map((story, i) => <button key={story.id} onClick={() => openStory(story)}><em>0{i + 1}</em><span>{story.title}</span><b>↗</b></button>)}
             </div>
           </section>}
@@ -282,7 +283,10 @@ export default function Home() {
         <button className="drawer-translate" onClick={() => void translateStory(selected)}>{translating === selected.id ? "翻译中…" : translations[selected.id] ? "查看原文" : isEnglish(selected) ? "译为中文" : "Translate to English"}</button>
         <section className="drawer-section ai-summary"><span>AI 总结摘要</span>
           {articleLoading ? <div className="summary-loading">正在读取原文并生成摘要…</div> : <p>{translations[selected.id]?.summary ?? articleDetail?.aiSummary ?? selected.summary}</p>}
-          {!!articleDetail?.keyPoints?.length && <ul>{articleDetail.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul>}
+          {!!articleDetail?.keyPoints?.length && <ul>{articleDetail.keyPoints.map((point) => {
+            const sentence = oneSentence(point);
+            return sentence ? <li key={point}><strong>{sentence}</strong></li> : null;
+          })}</ul>}
         </section>
         {selected.related >= 3 && <section className="evidence-box"><span>多源验证</span><h3>{selected.related} 个独立来源提及此事件</h3><p>{selected.sourceMentions.join("、")}</p></section>}
         <section className="drawer-section"><span>原文信息</span><p>{articleDetail?.description ?? selected.summary}</p></section>
