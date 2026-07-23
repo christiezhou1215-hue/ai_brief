@@ -36,6 +36,11 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "db/**",
+    "worker/**",
+    "examples/**",
+    "vite.config.ts",
+    "wrangler.jsonc"
   ]
 }
