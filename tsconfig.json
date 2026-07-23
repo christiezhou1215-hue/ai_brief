@@ -30,8 +30,10 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
@@ -40,6 +42,8 @@
     "db/**",
     "worker/**",
     "examples/**",
+    "scripts/**",
+    "drizzle.config.ts",
     "vite.config.ts",
     "wrangler.jsonc"
   ]
