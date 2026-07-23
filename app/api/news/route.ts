@@ -264,6 +264,7 @@ const completeSentence = (value: string) => /[。！？.!?]$/.test(value) ? valu
 const short = (value: string, max = 150) => {
   const text = decode(value)
     .replace(/^[·•\-–—\s]+/, "")
+    .replace(/(?:\.{3,}|…{2,})/g, "。")
     .replace(/#\S+/g, "")
     .replace(/欢迎关注[\s\S]*$/i, "")
     .replace(/(?:微信公众号|微信号|更多精彩内容)[\s\S]*$/i, "")
@@ -276,7 +277,7 @@ const short = (value: string, max = 150) => {
   if (candidate.length <= max) return completeSentence(candidate);
   const cut = candidate.slice(0, max);
   const boundary = Math.max(cut.lastIndexOf("。"), cut.lastIndexOf("！"), cut.lastIndexOf("？"), cut.lastIndexOf("；"), cut.lastIndexOf("，"));
-  return completeSentence(cut.slice(0, boundary >= 70 ? boundary : max).replace(/[，；、\s]+$/, ""));
+  return completeSentence(cut.slice(0, boundary >= 55 ? boundary : max).replace(/[，；、\s]+$/, "").replace(/\s*(?:\.{3,}|…+)\s*$/, ""));
 };
 const cleanTitle = (value: string, sourceName = "") => {
   let text = decode(value).replace(/\s+/g, " ").trim();
