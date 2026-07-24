@@ -531,3 +531,16 @@ body{background:
   .brief-copy{padding:21px 19px}
   .trend-stack{padding:12px 13px 14px}
 }
+
+/* Single-line editorial filters */
+.smart-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.filter-group,.sort-group{min-height:48px;display:flex;align-items:center;gap:8px;padding:6px 8px 6px 11px}
+.filter-group>span{flex:0 0 auto;margin:0;font-size:9px}
+.filter-group>div,.sort-group>div{min-width:0;flex:1;display:flex;align-items:center;gap:2px;margin:0}
+.filter-group button{height:30px;flex:1;padding:0 6px;font-size:9px}
+
+@media(max-width:900px){
+  .smart-filters{grid-template-columns:max-content max-content max-content;overflow-x:auto;padding-bottom:5px;scrollbar-width:none}
+  .smart-filters::-webkit-scrollbar{display:none}
+  .filter-group,.sort-group{min-width:270px}
+}
