@@ -10,7 +10,7 @@ type Story = {
 };
 type SourceStatus = {
   name: string; mark: string; homepage: string; type: string; chinese: boolean;
-  trustScore: number; ok: boolean; itemCount: number;
+  trustScore: number; ok: boolean; itemCount: number; health?: "online" | "degraded" | "offline" | "disabled";
 };
 type ChatMessage = { role: "user" | "assistant"; content: string; citations?: Array<{ title: string; source: string; url: string }>; followUps?: string[] };
 type Translation = { title: string; summary: string; target: "zh" | "en" };
@@ -477,7 +477,7 @@ export default function Home() {
                 <button className={`source-toggle ${enabled ? "on" : ""}`} onClick={() => toggleSource(source.name)} role="switch" aria-checked={enabled} aria-label={`${enabled ? "停用" : "启用"} ${source.name}`}><i /></button>
               </div>
               <div className="source-tags"><span>{source.chinese ? "中文内容" : "国际来源"}</span><span>{source.type === "atom" ? "Atom" : "RSS / 聚合"}</span><span>{enabled ? "已启用" : "已停用"}</span></div>
-              <div className="source-tag-meta"><span className={`health ${source.ok ? "ok" : ""}`}>{source.ok ? "在线" : "暂时不可用"}</span><span>{source.itemCount} 条内容</span><a href={source.homepage} target="_blank" rel="noreferrer">访问来源 ↗</a></div>
+              <div className="source-tag-meta"><span className={`health ${source.health === "degraded" ? "degraded" : source.ok ? "ok" : ""}`}>{source.health === "degraded" ? "网络波动" : source.ok ? "在线" : enabled ? "暂时不可用" : "已停用"}</span><span>{source.itemCount} 条内容</span><a href={source.homepage} target="_blank" rel="noreferrer">访问来源 ↗</a></div>
             </article>;
           })}</div>
           {sourceTotalPages > 1 && <div className="pagination source-pagination"><button disabled={sourcePage === 1} onClick={() => setSourcePage((value) => value - 1)}>← 上一页</button><div>{Array.from({ length: sourceTotalPages }, (_, index) => index + 1).slice(Math.max(0, sourcePage - 3), Math.min(sourceTotalPages, sourcePage + 2)).map((item) => <button key={item} className={sourcePage === item ? "active" : ""} onClick={() => setSourcePage(item)}>{item}</button>)}</div><button disabled={sourcePage === sourceTotalPages} onClick={() => setSourcePage((value) => value + 1)}>下一页 →</button></div>}
