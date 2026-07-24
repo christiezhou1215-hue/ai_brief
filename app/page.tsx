@@ -91,6 +91,7 @@ export default function Home() {
   const [selected, setSelected] = useState<Story | null>(null);
   const [articleDetail, setArticleDetail] = useState<ArticleDetail | null>(null);
   const [articleLoading, setArticleLoading] = useState(false);
+  const [detailTranslating, setDetailTranslating] = useState(false);
   const [translations, setTranslations] = useState<Record<string, Translation>>({});
   const [contentLanguage, setContentLanguage] = useState<"zh" | "en">("zh");
   const [pageTranslating, setPageTranslating] = useState(false);
@@ -318,6 +319,34 @@ export default function Home() {
     }).finally(() => setPageTranslating(false));
   }, [active, contentLanguage, dailyInsight, insightTranslationKey, loading, page, pageTranslating, paged, topStories, translations]);
 
+  useEffect(() => {
+    if (!selected || !articleDetail || detailTranslating) return;
+    const combined = `${articleDetail.title}${articleDetail.aiSummary}${articleDetail.description}${articleDetail.keyPoints.join("")}${articleDetail.paragraphs.join("")}`;
+    const originalLanguage = /[\u4e00-\u9fff]/.test(combined) ? "zh" : "en";
+    if (originalLanguage === contentLanguage) return;
+    const prefix = `__detail:${selected.id}`;
+    const items = [
+      { id: `${prefix}:main`, title: articleDetail.title, summary: articleDetail.aiSummary },
+      { id: `${prefix}:description`, title: "原文信息", summary: articleDetail.description },
+      ...articleDetail.keyPoints.slice(0, 8).map((point, index) => ({ id: `${prefix}:point:${index}`, title: `重点 ${index + 1}`, summary: point })),
+      ...articleDetail.paragraphs.slice(0, 6).map((paragraph, index) => ({ id: `${prefix}:paragraph:${index}`, title: `正文 ${index + 1}`, summary: paragraph })),
+    ];
+    const missing = items.filter((item) => translations[item.id]?.target !== contentLanguage);
+    if (!missing.length) return;
+    setDetailTranslating(true);
+    void fetch("/api/translate", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ items: missing, target: contentLanguage }),
+    }).then((response) => response.json()).then((data: { translations?: Array<{ id: string; title: string; summary: string }> }) => {
+      if (!data.translations?.length) return;
+      setTranslations((current) => {
+        const next = { ...current };
+        data.translations?.forEach((item) => { next[item.id] = { title: item.title, summary: item.summary, target: contentLanguage }; });
+        return next;
+      });
+    }).finally(() => setDetailTranslating(false));
+  }, [articleDetail, contentLanguage, detailTranslating, selected, translations]);
+
   const clearContentCache = () => {
     window.localStorage.removeItem("ai-brief-last-news");
     window.localStorage.removeItem("ai-brief-translations");
@@ -472,19 +501,23 @@ export default function Home() {
         <div className="drawer-source"><span className="source-mark">{selected.sourceMark}</span><div><b>{selected.source}</b><small>{formatDate(selected.publishedAt)}</small></div></div>
         <div className="story-badges"><span>{selected.category}</span><span className={`level ${selected.level}`}>{selected.level}</span></div>
         {(articleDetail?.imageUrl || selected.imageUrl) && <img className="article-image" src={articleDetail?.imageUrl || selected.imageUrl} alt="" onError={(event) => { event.currentTarget.hidden = true; }} />}
-        <h2>{cleanDisplayTitle(displayed(selected).title || articleDetail?.title || selected.title, selected.source)}</h2>
+        <h2>{cleanDisplayTitle(translations[`__detail:${selected.id}:main`]?.target === contentLanguage ? translations[`__detail:${selected.id}:main`].title : displayed(selected).title || articleDetail?.title || selected.title, selected.source)}</h2>
         <div className="original-meta"><span>{articleDetail?.siteName || selected.source}</span>{articleDetail?.author && <span>作者：{articleDetail.author}</span>}<span>{formatDate(articleDetail?.publishedAt || selected.publishedAt)}</span></div>
         <section className="drawer-section ai-summary"><span>AI 总结摘要</span>
-          {articleLoading ? <div className="summary-loading">正在读取原文并生成摘要…</div> : <p>{articleDetail?.aiSummary || displayed(selected).summary || selected.summary}</p>}
-          {!!articleDetail?.keyPoints?.length && <ul>{articleDetail.keyPoints.map((point) => {
-            const sentence = oneSentence(point);
+          {articleLoading ? <div className="summary-loading">正在读取原文并生成摘要…</div> : detailTranslating ? <div className="summary-loading">正在翻译完整详情…</div> : <p>{translations[`__detail:${selected.id}:main`]?.target === contentLanguage ? translations[`__detail:${selected.id}:main`].summary : articleDetail?.aiSummary || displayed(selected).summary || selected.summary}</p>}
+          {!!articleDetail?.keyPoints?.length && <ul>{articleDetail.keyPoints.map((point, index) => {
+            const translatedPoint = translations[`__detail:${selected.id}:point:${index}`];
+            const sentence = oneSentence(translatedPoint?.target === contentLanguage ? translatedPoint.summary : point);
             return sentence ? <li key={point}><strong>{sentence}</strong></li> : null;
           })}</ul>}
         </section>
         {selected.related >= 3 && <section className="evidence-box"><span>多源验证</span><h3>{selected.related} 个独立来源提及此事件</h3><p>{selected.sourceMentions.join("、")}</p></section>}
         <section className="drawer-section original-content"><span>原文信息</span>
-          <p>{articleDetail?.description ?? selected.summary}</p>
-          {articleDetail?.paragraphs?.slice(0, 6).map((paragraph, index) => <p key={`${index}-${paragraph.slice(0, 20)}`}>{paragraph}</p>)}
+          <p>{translations[`__detail:${selected.id}:description`]?.target === contentLanguage ? translations[`__detail:${selected.id}:description`].summary : articleDetail?.description ?? displayed(selected).summary}</p>
+          {articleDetail?.paragraphs?.slice(0, 6).map((paragraph, index) => {
+            const translatedParagraph = translations[`__detail:${selected.id}:paragraph:${index}`];
+            return <p key={`${index}-${paragraph.slice(0, 20)}`}>{translatedParagraph?.target === contentLanguage ? translatedParagraph.summary : paragraph}</p>;
+          })}
         </section>
         <div className="drawer-actions"><button onClick={() => toggleSaved(selected.id)}>{saved.includes(selected.id) ? "♥ 已收藏" : "♡ 收藏"}</button><a href={selected.url} target="_blank" rel="noreferrer">阅读原文 ↗</a></div>
       </div>
