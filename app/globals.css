@@ -544,3 +544,10 @@ body{background:
   .smart-filters::-webkit-scrollbar{display:none}
   .filter-group,.sort-group{min-width:270px}
 }
+
+/* Unified adjacent pagination and clearer summary rhythm */
+.source-pagination{justify-content:center;gap:6px}
+.source-pagination>div{display:flex;gap:5px}
+.source-pagination>div button{width:34px;padding:0}
+.insight-points{gap:13px}
+.insight-points li{line-height:1.6}
