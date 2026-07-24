@@ -447,7 +447,7 @@ export default function Home() {
               </article>;})}
             </section> : <div className="empty"><span>◇</span><h3>没有符合条件的内容</h3><p>调整筛选条件，或刷新获取最新资讯。</p></div>}
 
-          {totalPages > 1 && <div className="pagination"><button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>← 上一页</button><span>{page} / {totalPages}</span><button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>下一页 →</button></div>}
+          {totalPages > 1 && <div className="pagination source-pagination"><button disabled={page === 1} onClick={() => setPage((value) => value - 1)}>← 上一页</button><div>{Array.from({ length: totalPages }, (_, index) => index + 1).slice(Math.max(0, page - 3), Math.min(totalPages, page + 2)).map((item) => <button key={item} className={page === item ? "active" : ""} onClick={() => setPage(item)}>{item}</button>)}</div><button disabled={page === totalPages} onClick={() => setPage((value) => value + 1)}>下一页 →</button></div>}
         </>}
 
         {active === "AI 问答" && <section className="ask-page reveal">
