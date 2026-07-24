@@ -551,3 +551,5 @@ body{background:
 .source-pagination>div button{width:34px;padding:0}
 .insight-points{gap:13px}
 .insight-points li{line-height:1.6}
+.health.degraded{color:#9a7329}
+.health.degraded:before{background:#d4a84e}
