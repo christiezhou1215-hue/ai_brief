@@ -310,14 +310,33 @@ const normalize = (title: string) => title.toLowerCase()
   .replace(/[^a-z0-9\u4e00-\u9fff]/g, "").slice(0, 54);
 
 const memoryCache = new Map<string, { at: number; payload: unknown }>();
+const sourceHealth = new Map<string, { lastSuccessAt: number; failures: number }>();
+const RECENT_SUCCESS_WINDOW = 6 * 60 * 60_000;
 
-async function fetchSource(source: Source): Promise<NewsItem[]> {
+async function mapConcurrent<T, R>(items: T[], limit: number, worker: (item: T, index: number) => Promise<R>) {
+  const results = new Array<PromiseSettledResult<R>>(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      try {
+        results[index] = { status: "fulfilled", value: await worker(items[index], index) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+async function fetchSource(source: Source, timeout = 5_500): Promise<NewsItem[]> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 3_600);
+  const timer = setTimeout(() => controller.abort(), timeout);
   try {
     const response = await fetch(source.url, {
       signal: controller.signal,
-      headers: { "user-agent": "AI-Brief/2.0", accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" },
+      headers: { "user-agent": "Mozilla/5.0 (compatible; AI-Brief/2.0; +https://ai-brief-drab.vercel.app)", accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" },
       next: { revalidate: 900 },
     });
     if (!response.ok) throw new Error(String(response.status));
@@ -356,7 +375,14 @@ export async function GET(request: Request) {
   const visibleSources = requested ? sources.filter((source) => source.name === requested) : sources;
   const active = visibleSources.filter((source) => !disabled.has(source.name));
   if (!active.length && requested) return NextResponse.json({ error: "Unknown source" }, { status: 400 });
-  const results = await Promise.allSettled(active.map(fetchSource));
+  const results = await mapConcurrent(active, 48, (source) => fetchSource(source));
+  const failedIndexes = results.map((result, index) => result.status === "rejected" ? index : -1).filter((index) => index >= 0);
+  if (failedIndexes.length) {
+    const retries = await mapConcurrent(failedIndexes, 32, (index) => fetchSource(active[index], 4_500));
+    retries.forEach((result, retryIndex) => {
+      if (result.status === "fulfilled") results[failedIndexes[retryIndex]] = result;
+    });
+  }
   const groups = new Map<string, NewsItem>();
   results.forEach((result) => {
     if (result.status !== "fulfilled") return;
@@ -375,10 +401,18 @@ export async function GET(request: Request) {
   const statuses = visibleSources.map((source) => {
     const index = active.findIndex((item) => item.name === source.name);
     const enabled = index >= 0;
+    const result = enabled ? results[index] : undefined;
+    const succeeded = result?.status === "fulfilled";
+    const previous = sourceHealth.get(source.name);
+    if (succeeded) sourceHealth.set(source.name, { lastSuccessAt: Date.now(), failures: 0 });
+    else if (enabled) sourceHealth.set(source.name, { lastSuccessAt: previous?.lastSuccessAt ?? 0, failures: (previous?.failures ?? 0) + 1 });
+    const recentlyHealthy = Boolean(previous?.lastSuccessAt && Date.now() - previous.lastSuccessAt < RECENT_SUCCESS_WINDOW);
+    const health = !enabled ? "disabled" : succeeded ? "online" : recentlyHealthy ? "degraded" : "offline";
     return {
       name: source.name, mark: source.mark, homepage: source.homepage ?? new URL(source.url).origin, type: source.type ?? "rss",
       chinese: Boolean(source.chinese), trustScore: source.tier === 1 ? 88 : source.tier === 2 ? 74 : 61, enabled,
-      ok: enabled && results[index]?.status === "fulfilled", itemCount: enabled && results[index]?.status === "fulfilled" ? results[index].value.length : 0,
+      ok: health === "online" || health === "degraded", health,
+      itemCount: result?.status === "fulfilled" ? result.value.length : 0,
     };
   });
   const payload = {
