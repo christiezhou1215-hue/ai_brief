@@ -2,7 +2,7 @@
 
 AI Brief 是一个面向中文用户的 AI 资讯聚合、趋势总结与研究问答网站。
 
-- 正式网站：https://ai-brief-drab.vercel.app/
+- 正式网站：https://ai-signal-brief-zhou.vercel.app/
 - 正式代码：`main` 分支
 - 部署方式：Vercel 监听 `main`，合并或提交后自动部署
 
