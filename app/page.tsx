@@ -168,7 +168,7 @@ export default function Home() {
     if (articleCache) {
       try { articleCacheRef.current = JSON.parse(articleCache); } catch { articleCacheRef.current = {}; }
     }
-    const summaryCache = window.localStorage.getItem("ai-brief-ai-summary-v6");
+    const summaryCache = window.localStorage.getItem("ai-brief-ai-summary-v7");
     if (summaryCache) {
       try {
         const cached = JSON.parse(summaryCache) as { day?: string; summary?: string };
@@ -397,7 +397,7 @@ export default function Home() {
         const boilerplate = /资讯主要集中在|持续释放.*信号|市场关注度正在上升|值得关注的行业动态|^\s*\d+(?:\.\d+)?\s*(?:将|已|正|在|于)/;
         if (boilerplate.test(data.summary)) return;
         setAiInsight(data.summary);
-        window.localStorage.setItem("ai-brief-ai-summary-v6", JSON.stringify({
+        window.localStorage.setItem("ai-brief-ai-summary-v7", JSON.stringify({
           day: new Date().toISOString().slice(0, 10),
           summary: data.summary,
         }));
@@ -467,6 +467,7 @@ export default function Home() {
     window.localStorage.removeItem("ai-brief-ai-summary-v4");
     window.localStorage.removeItem("ai-brief-ai-summary-v5");
     window.localStorage.removeItem("ai-brief-ai-summary-v6");
+    window.localStorage.removeItem("ai-brief-ai-summary-v7");
     window.localStorage.removeItem("ai-brief-article-cache");
     articleCacheRef.current = {};
     setAiInsight("");
