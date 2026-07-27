@@ -41,13 +41,19 @@ const completeSummary = (value = "") => {
   return /[。！？.!?]$/.test(text) ? text : `${text}。`;
 };
 const cleanDisplayTitle = (value = "", source = "") => {
-  let text = value.replace(/(?:\.{3,}|…+)/g, " ").replace(/\s+/g, " ").trim();
+  let text = value
+    .replace(/^\s*(?:[（(]?\d{1,2}[)）]?\s*[、,，.:：\-]\s*)+/, "")
+    .replace(/(?:\.{3,}|…+)/g, " ").replace(/\s+/g, " ").trim();
   const aliases = [source, source.replace(/\s*(?:科技|新闻|中文|AI|人工智能|开发者社区|开发者|研究院|实验室|学院)$/i, "")].filter((name) => name.length >= 2);
   aliases.forEach((name) => {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     text = text.replace(new RegExp(`\\s*(?:[-—–_|｜]|·)\\s*${escaped}\\s*$`, "i"), "").trim();
   });
-  return text.replace(/\s*(?:[-—–_|｜]|·)\s*(?:光明网|新华网|人民网|中国新闻网|央视网|澎湃新闻|品玩|量子位|机器之心|雷峰网|(?:www\.)?[\w.-]+\.(?:com|cn|net|org)(?:\.cn)?)\s*$/i, "").trim();
+  return text
+    .replace(/\s*(?:[-—–_|｜·]\s*)+(?:光明网|新华网|人民网|中国新闻网|央视网|澎湃新闻|品玩|量子位|机器之心|雷峰网|Sohu|搜狐(?:新闻|科技)?|QQ\s*News|腾讯新闻|(?:www\.)?[\w.-]+\.(?:com|cn|net|org)(?:\.cn)?)(?:\s*[-—–_|｜·])?\s*$/i, "")
+    .replace(/\s*[（(]\s*(?:来源[:：]?)?\s*(?:Sohu|搜狐(?:新闻|科技)?|QQ\s*News|腾讯新闻|新华网|光明网)\s*[)）]\s*$/i, "")
+    .replace(/([A-Za-z]+-\d+(?:\.\d+)*)\.(?=\s*$)/, "$1")
+    .trim();
 };
 const sourceCategory = (source: SourceStatus) => {
   const name = source.name.toLowerCase();
@@ -162,7 +168,7 @@ export default function Home() {
     if (articleCache) {
       try { articleCacheRef.current = JSON.parse(articleCache); } catch { articleCacheRef.current = {}; }
     }
-    const summaryCache = window.localStorage.getItem("ai-brief-ai-summary");
+    const summaryCache = window.localStorage.getItem("ai-brief-ai-summary-v2");
     if (summaryCache) {
       try {
         const cached = JSON.parse(summaryCache) as { day?: string; summary?: string };
@@ -297,7 +303,7 @@ export default function Home() {
     return !originalMatches && translated?.target === contentLanguage ? translated : { title: story.title, summary: story.summary };
   };
   const openStory = (story: Story) => {
-    const articleKey = `${story.url}::${story.title}`;
+    const articleKey = `v2::${story.url}::${story.title}`;
     const cached = articleCacheRef.current[articleKey];
     const fallback: ArticleDetail = {
       title: story.title, description: completeSummary(story.summary), imageUrl: story.imageUrl,
@@ -386,7 +392,7 @@ export default function Home() {
     }).then((response) => response.json()).then((data: { summary?: string }) => {
       if (data.summary) {
         setAiInsight(data.summary);
-        window.localStorage.setItem("ai-brief-ai-summary", JSON.stringify({
+        window.localStorage.setItem("ai-brief-ai-summary-v2", JSON.stringify({
           day: new Date().toISOString().slice(0, 10),
           summary: data.summary,
         }));
@@ -451,6 +457,7 @@ export default function Home() {
     window.localStorage.removeItem("ai-brief-last-news");
     window.localStorage.removeItem("ai-brief-translations");
     window.localStorage.removeItem("ai-brief-ai-summary");
+    window.localStorage.removeItem("ai-brief-ai-summary-v2");
     window.localStorage.removeItem("ai-brief-article-cache");
     articleCacheRef.current = {};
     setAiInsight("");
