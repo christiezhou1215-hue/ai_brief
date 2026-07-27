@@ -265,17 +265,21 @@ const short = (value: string, max = 150) => {
   const text = decode(value)
     .replace(/^[·•\-–—\s]+/, "")
     .replace(/(?:\.{3,}|…{2,})/g, "。")
+    .replace(/[，,]\s*[。.!！]/g, "。")
+    .replace(/([。！？])\s*[·•]\s*/g, "$1")
     .replace(/#\S+/g, "")
     .replace(/欢迎关注[\s\S]*$/i, "")
     .replace(/(?:微信公众号|微信号|更多精彩内容)[\s\S]*$/i, "")
     .replace(/\s+/g, " ").trim();
-  if (!text) return "这条资讯提供了新的 AI 行业动态，点击可查看完整原文。";
+  if (!text) return "";
   const sentences = text.match(/[^。！？.!?]+[。！？.!?]/g)?.map((item) => item.trim()).filter((item) => item.length >= 12) ?? [];
-  const selected = sentences.slice(0, 2).join("");
+  const selected = sentences.slice(0, 3).join("");
   if (selected && selected.length <= max + 30) return selected;
-  const candidate = selected || text;
+  const candidate = selected || completeSentence(text);
   if (candidate.length <= max) return completeSentence(candidate);
-  const cut = candidate.slice(0, max);
+  const completeWithinLimit = sentences.filter((sentence, index) => sentences.slice(0, index + 1).join("").length <= max).join("");
+  if (completeWithinLimit.length >= 35) return completeWithinLimit;
+  const cut = candidate.slice(0, max + 1);
   const boundary = Math.max(cut.lastIndexOf("。"), cut.lastIndexOf("！"), cut.lastIndexOf("？"), cut.lastIndexOf("；"), cut.lastIndexOf("，"));
   return completeSentence(cut.slice(0, boundary >= 55 ? boundary : max).replace(/[，；、\s]+$/, "").replace(/\s*(?:\.{3,}|…+)\s*$/, ""));
 };
@@ -290,13 +294,22 @@ const cleanTitle = (value: string, sourceName = "") => {
     text = text.replace(new RegExp(`\\s*(?:[-—–_|｜]|·)\\s*${escaped}\\s*$`, "i"), "").trim();
   });
   text = text
-    .replace(/\s*(?:[-—–_|｜]|·)\s*(?:阿里云开发者社区|腾讯云开发者社区|华为云开发者联盟|CSDN博客|掘金|光明网|新华网|人民网|中国新闻网|央视网|新浪科技|搜狐科技|网易科技|凤凰科技|澎湃新闻|极客公园|品玩|量子位|机器之心|雷峰网)\s*$/i, "")
+    .replace(/\s*(?:[-—–_|｜]|·)\s*(?:阿里云开发者社区|腾讯云开发者社区|华为云开发者联盟|CSDN博客|掘金|光明网|新华网|人民网|中国新闻网|央视网|新浪科技|搜狐科技|网易科技|凤凰科技|澎湃新闻|极客公园|品玩|量子位|机器之心|雷峰网|Sohu|QQ News)\s*$/i, "")
     .replace(/\s*(?:[-—–_|｜]|·)\s*(?:www\.)?[\w.-]+\.(?:com|cn|net|org)(?:\.cn)?\s*$/i, "")
     .trim();
-  if (text.length > 65 && (text.match(/[\/｜|]/g)?.length ?? 0) >= 2) {
-    return text.split(/[\/]/)[0].trim();
-  }
   return text;
+};
+const splitDigestTitle = (title: string) => {
+  const digest = /^(?:早报|晚报|晨报|日报|速览|今日热点|科技早知道)\s*[｜|:：]/.test(title);
+  const body = title.replace(/^(?:早报|晚报|晨报|日报|速览|今日热点|科技早知道)\s*[｜|:：]\s*/, "");
+  const parts = body.split(/\s*(?:\/|｜|\|)\s*/).map((part) => part.trim()).filter((part) => part.length >= 8);
+  return digest && parts.length >= 2 ? parts.slice(0, 8) : [title];
+};
+const focusedSummary = (headline: string, fullSummary: string) => {
+  const keywords = headline.toLowerCase().match(/[a-z][a-z0-9.-]{2,}|[\u4e00-\u9fff]{2,6}/g)?.filter((word) => !/发布|推出|正式|宣布|今日|最新/.test(word)) ?? [];
+  const segments = fullSummary.split(/(?<=[。！？.!?])\s*|[·•]\s*/).map((item) => item.trim()).filter((item) => item.length >= 12);
+  const matched = segments.filter((segment) => keywords.some((word) => segment.toLowerCase().includes(word))).slice(0, 2);
+  return short(matched.join(""), 220) || completeSentence(headline);
 };
 const isAi = (text: string) => /人工智能|大模型|模型|智能体|机器人|算法|芯片|\bai\b|gpt|claude|gemini|deepseek|llm|agent/i.test(text);
 const categoryFor = (text: string) => /agent|智能体|copilot/i.test(text) ? "AI Agent"
@@ -343,22 +356,25 @@ async function fetchSource(source: Source, timeout = 5_500): Promise<NewsItem[]>
     const xml = await response.text();
     const atom = source.type === "atom";
     const blocks = xml.match(atom ? /<entry\b[\s\S]*?<\/entry>/gi : /<item\b[\s\S]*?<\/item>/gi) ?? [];
-    return blocks.slice(0, 18).map((block, index) => {
+    return blocks.slice(0, 18).flatMap((block, index) => {
       const title = cleanTitle(field(block, "title"), source.name);
-      const summary = short(field(block, atom ? "summary" : "description") || field(block, "content:encoded"));
-      const text = `${title} ${summary}`;
+      const fullSummary = short(field(block, atom ? "summary" : "description") || field(block, "content:encoded"), 260);
       const publishedAt = decode(field(block, atom ? "published" : "pubDate") || field(block, "updated")) || new Date().toISOString();
       const baseTrust = source.tier === 1 ? 88 : source.tier === 2 ? 74 : 61;
-      const score = Math.min(100, baseTrust - 20 + (/发布|推出|上线|开源|release|launch/i.test(text) ? 18 : 0) + (/gpt|gemini|claude|deepseek|模型/i.test(text) ? 11 : 0));
-      const level: NewsItem["level"] = score >= 77 ? "重要" : score >= 58 ? "关注" : "一般";
       const imageUrl = block.match(/<(?:media:content|media:thumbnail|enclosure)\b[^>]+url=["']([^"']+)["']/i)?.[1]
         ?? block.match(/<img\b[^>]+(?:data-src|src)=["']([^"']+)["']/i)?.[1];
-      return {
-        id: `${source.mark}-${index}-${publishedAt}`, title, source: source.name, sourceMark: source.mark,
-        publishedAt, url: linkFor(block, atom), category: categoryFor(text), level, score,
-        trustScore: baseTrust, trustLabel: baseTrust >= 82 ? "高可信" : baseTrust >= 68 ? "较可信" : "待核实",
-        summary, tags: [categoryFor(text), source.chinese ? "中文" : "国际"], related: 1, sourceMentions: [source.name], imageUrl,
-      } satisfies NewsItem;
+      return splitDigestTitle(title).map((focusedTitle, partIndex) => {
+        const summary = focusedSummary(focusedTitle, fullSummary);
+        const text = `${focusedTitle} ${summary}`;
+        const score = Math.min(100, baseTrust - 20 + (/发布|推出|上线|开源|release|launch/i.test(text) ? 18 : 0) + (/gpt|gemini|claude|deepseek|模型/i.test(text) ? 11 : 0));
+        const level: NewsItem["level"] = score >= 77 ? "重要" : score >= 58 ? "关注" : "一般";
+        return {
+          id: `${source.mark}-${index}-${partIndex}-${publishedAt}`, title: focusedTitle, source: source.name, sourceMark: source.mark,
+          publishedAt, url: linkFor(block, atom), category: categoryFor(text), level, score,
+          trustScore: baseTrust, trustLabel: baseTrust >= 82 ? "高可信" : baseTrust >= 68 ? "较可信" : "待核实",
+          summary, tags: [categoryFor(text), source.chinese ? "中文" : "国际"], related: 1, sourceMentions: [source.name], imageUrl,
+        } satisfies NewsItem;
+      });
     }).filter((item) => item.title && item.url && (source.tier === 1 || isAi(`${item.title} ${item.summary}`)));
   } finally { clearTimeout(timer); }
 }
