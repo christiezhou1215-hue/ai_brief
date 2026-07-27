@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     .slice(0, 48);
   if (!stories.length) return NextResponse.json({ summary: "正在整理今天的 AI 核心趋势。" });
   const day = new Date().toISOString().slice(0, 10);
-  const cacheKey = `v2:${day}:${stories.slice(0, 12).map((story) => story.title).join("|")}`;
+  const cacheKey = `v3:${day}:${stories.slice(0, 12).map((story) => story.title).join("|")}`;
   const cached = summaryCache.get(cacheKey);
   if (cached && Date.now() - cached.at < 24 * 60 * 60_000) {
     return NextResponse.json({ summary: cached.summary, cached: true });
@@ -38,11 +38,12 @@ export async function POST(request: Request) {
   let summary = "";
   if (aiConfigured()) {
     const result = await generateJson<{ summary: string }>(
-      "你是 AI Brief 的资深科技主编。只返回 JSON：{\"summary\":\"句1。句2。句3。\"}。必须恰好写3个完整中文句子，每句30至58个汉字，每句只总结一个不同的核心趋势，并写清楚具体主体、发生的动作以及对产品、开发者或行业的实际影响。优先采用高分、多来源提及和官方一手信息；只有单一来源时使用审慎措辞。不要把无关事件拼进同一句，不要复述长标题，不要罗列媒体名，不要使用“动态集中在”“持续释放信号”“值得关注”等空泛套话。信息不足时明确写“仍需后续验证”。",
+      "你是 AI Brief 的资深科技主编。只返回 JSON：{\"summary\":\"句1。句2。句3。\"}。必须恰好写3个完整中文句子，每句45至78个汉字。每句必须构成一个真正的行业趋势判断，结构为：正在发生的具体变化＋1至2个代表性公司、模型或产品事实＋这对行业、产品或开发者意味着什么。三个句子分别覆盖不同方向，优先选择会影响模型能力、成本、开发方式、商业落地或竞争格局的变化。必须使用输入中的具体事实，不得只写分类、来源数量、关注度或“发布了新产品”。不要出现媒体名称，不要写“资讯主要集中在”“持续释放信号”“市场关注度正在上升”“值得关注”等套话，不要把无关事件拼接。事实只有单一来源时使用审慎措辞。",
       JSON.stringify({ date: day, stories }),
     );
-    if (result?.summary && (result.summary.match(/[。！？]/g)?.length ?? 0) >= 3) {
-      summary = (result.summary.match(/[^。！？]+[。！？]/g) ?? []).slice(0, 3).join("").slice(0, 210);
+    const boilerplate = /资讯主要集中在|持续释放.*信号|市场关注度正在上升|值得关注的行业动态|等一手来源/;
+    if (result?.summary && !boilerplate.test(result.summary) && (result.summary.match(/[。！？]/g)?.length ?? 0) >= 3) {
+      summary = (result.summary.match(/[^。！？]+[。！？]/g) ?? []).slice(0, 3).join("").slice(0, 270);
     }
   }
 
@@ -60,8 +61,9 @@ export async function POST(request: Request) {
       return "相关变化正在影响企业投入与产品落地节奏";
     };
     summary = distinct.map((story) => {
-      const title = story.title.slice(0, 42);
-      return `${title}，${impactFor(story.category)}${(story.related ?? 1) >= 3 ? "" : "，但仍需后续验证"}。`;
+      const title = story.title.slice(0, 48);
+      const fact = story.summary.match(/^[\s\S]*?[。！？.!?]/)?.[0]?.replace(/[。！？.!?]$/, "") ?? "";
+      return `${title}${fact && !title.includes(fact) ? `，${fact}` : ""}；${impactFor(story.category)}${(story.related ?? 1) >= 3 ? "" : "，但仍需后续验证"}。`;
     }).join("");
   }
 
