@@ -6,7 +6,7 @@ type SummaryStory = {
   related?: number; sourceMentions?: string[]; publishedAt?: string;
   score?: number; trustScore?: number;
 };
-type EditorialTrend = { conclusion: string; evidenceTitles: string[] };
+type EditorialTrend = { conclusion: string; evidenceIds: number[] };
 
 const summaryCache = new Map<string, { at: number; summary: string }>();
 const splitSentences = (value = "") =>
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     .slice(0, 48);
   if (!stories.length) return NextResponse.json({ summary: "正在整理今天的 AI 核心趋势。" });
   const day = new Date().toISOString().slice(0, 10);
-  const cacheKey = `v5:${day}:${stories.slice(0, 20).map((story) => story.title).join("|")}`;
+  const cacheKey = `v6:${day}:${stories.slice(0, 20).map((story) => story.title).join("|")}`;
   const cached = summaryCache.get(cacheKey);
   if (cached && Date.now() - cached.at < 24 * 60 * 60_000) {
     return NextResponse.json({ summary: cached.summary, cached: true });
@@ -52,43 +52,27 @@ export async function POST(request: Request) {
 
   let summary = "";
   if (aiConfigured()) {
-    const result = await generateJson<{ trends: EditorialTrend[] }>(
-      "你是 AI Brief 的资深科技主编。你的任务不是摘要新闻，而是读完当天材料后给出编辑部判断。先按同一变化聚类，只保留至少有2条材料共同支持的主题，再输出3条彼此不同的结论。只返回 JSON：{\"trends\":[{\"conclusion\":\"完整结论。\",\"evidenceTitles\":[\"输入中的完整标题1\",\"输入中的完整标题2\"]}]}。每条 conclusion 为55至90个汉字，结构必须是：先说正在形成的行业变化，再解释它意味着什么；公司、模型和产品只能作为论据嵌入句中，不能把句子写成发布清单。evidenceTitles 必须逐字复制输入标题且至少2个，用于证明结论确实来自多条材料。禁止照抄标题、禁止逐条排列新闻、禁止拼接无关事件、禁止媒体名称和来源数量，禁止以数字或指代不清的词开头。优先判断能力边界、成本结构、开发范式、商业落地和竞争格局发生了什么变化。",
-      JSON.stringify({ date: day, stories }),
-    );
-    const titleSet = new Set(stories.map((story) => story.title));
-    const trends = (result?.trends ?? []).filter((trend) =>
-      Array.isArray(trend.evidenceTitles)
-      && new Set(trend.evidenceTitles.filter((title) => titleSet.has(cleanStoryText(title)))).size >= 2
-      && validConclusion(trend.conclusion)
-    ).slice(0, 3);
-    const conclusions = trends.map((trend) => splitSentences(trend.conclusion)[0] ?? "");
-    if (conclusions.length === 3 && conclusions.every(validConclusion)) {
-      summary = conclusions.join("").slice(0, 300);
+    const indexedStories = stories.map((story, id) => ({ id, ...story }));
+    const prompt = "你是 AI Brief 的资深科技主编。你的任务不是摘要新闻，而是读完当天材料后给出编辑部判断。先按同一变化聚类，只保留至少有2条材料共同支持的主题，再输出3条彼此不同的结论。只返回 JSON：{\"trends\":[{\"conclusion\":\"完整结论。\",\"evidenceIds\":[0,3]}]}。每条 conclusion 为55至90个汉字，结构必须是：先说正在形成的行业变化，再解释它意味着什么；公司、模型和产品只能作为论据嵌入句中，不能写成发布清单。evidenceIds 必须填写输入材料中的数字 id，至少2个，而且这些材料必须真正支持同一结论。禁止照抄标题、逐条排列新闻、拼接无关事件、媒体名称和来源数量，禁止以数字或指代不清的词开头。优先判断能力边界、成本结构、开发范式、商业落地和竞争格局发生了什么变化。";
+    for (let attempt = 0; attempt < 2 && !summary; attempt += 1) {
+      const result = await generateJson<{ trends: EditorialTrend[] }>(
+        attempt === 0 ? prompt : `${prompt} 上一次输出未通过证据或句子质量校验；请重新聚类，确保每条 evidenceIds 有至少两个不同且相关的有效编号。`,
+        JSON.stringify({ date: day, stories: indexedStories }),
+      );
+      const trends = (result?.trends ?? []).filter((trend) =>
+        Array.isArray(trend.evidenceIds)
+        && new Set(trend.evidenceIds.filter((id) => Number.isInteger(id) && id >= 0 && id < stories.length)).size >= 2
+        && validConclusion(trend.conclusion)
+      ).slice(0, 3);
+      const conclusions = trends.map((trend) => splitSentences(trend.conclusion)[0] ?? "");
+      if (conclusions.length === 3 && conclusions.every(validConclusion)) {
+        summary = conclusions.join("").slice(0, 300);
+      }
     }
   }
 
   if (!summary) {
-    const grouped = [...new Map(stories.map((story) => [story.category, [] as SummaryStory[]])).entries()]
-      .map(([category]) => ({ category, items: stories.filter((story) => story.category === category) }))
-      .filter((group) => group.items.length >= 2)
-      .slice(0, 3);
-    const impactFor = (category: string) => {
-      if (category === "模型发布") return "模型能力、调用成本与开发选择将随之变化";
-      if (category === "AI Agent") return "智能体正在从演示走向可执行的业务流程";
-      if (category === "AI 编程") return "开发工具开始覆盖更多编码、测试与协作环节";
-      if (category === "多模态") return "语音、图像与视频能力正更快进入实际产品";
-      if (category === "学术研究") return "相关方法仍需更多复现与真实场景验证";
-      if (category === "开源项目") return "开发者可用的模型与工具选择正在扩大";
-      return "相关变化正在影响企业投入与产品落地节奏";
-    };
-    summary = grouped.map(({ category, items }) => {
-      const subjects = items.slice(0, 2).map((story) => story.title.replace(/[：:｜|].*$/, "").slice(0, 22));
-      return `${category}领域的多项进展显示，${subjects.join("与")}正在形成同向变化，${impactFor(category)}。`;
-    }).join("");
-    if (splitSentences(summary).length < 3) {
-      summary = "今日资讯仍在形成可交叉验证的主题，目前不足以得出三条可靠的行业结论，请稍后刷新查看。";
-    }
+    summary = "今日高质量资讯仍在聚合，目前尚不足以形成三条有多项事实支撑的行业结论，请稍后刷新查看。";
   }
 
   summaryCache.set(cacheKey, { at: Date.now(), summary });
