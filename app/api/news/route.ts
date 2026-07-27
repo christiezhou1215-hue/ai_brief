@@ -336,7 +336,7 @@ async function fetchSource(source: Source, timeout = 5_500): Promise<NewsItem[]>
   try {
     const response = await fetch(source.url, {
       signal: controller.signal,
-      headers: { "user-agent": "Mozilla/5.0 (compatible; AI-Brief/2.0; +https://ai-brief-drab.vercel.app)", accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" },
+      headers: { "user-agent": "Mozilla/5.0 (compatible; AI-Brief/2.0; +https://ai-signal-brief-zhou.vercel.app)", accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" },
       next: { revalidate: 900 },
     });
     if (!response.ok) throw new Error(String(response.status));
