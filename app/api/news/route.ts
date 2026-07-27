@@ -261,11 +261,18 @@ const linkFor = (block: string, atom: boolean) => atom
   ? block.match(/<link[^>]+href=["']([^"']+)["']/i)?.[1] ?? ""
   : decode(field(block, "link"));
 const completeSentence = (value: string) => /[。！？.!?]$/.test(value) ? value : `${value}。`;
+const stripNoise = (value: string) => value
+  .replace(/^\s*(?:[（(]?\d{1,2}[)）]?\s*[、,，.:：\-]\s*)+/, "")
+  .replace(/\s*(?:[-—–_|｜·]\s*)+(?:Sohu|搜狐(?:新闻|科技)?|QQ\s*News|腾讯新闻|新华网|光明网|人民网)(?:\s*[-—–_|｜·])?\s*$/gi, "")
+  .replace(/\s*[（(]\s*(?:来源[:：]?)?\s*(?:Sohu|搜狐(?:新闻|科技)?|QQ\s*News|腾讯新闻|新华网|光明网|人民网)\s*[)）]\s*$/gi, "")
+  .replace(/([A-Za-z]+-\d+(?:\.\d+)*)\.(?=\s*$)/, "$1")
+  .replace(/[，,]\s*[。.!！]/g, "。")
+  .replace(/\s+/g, " ")
+  .trim();
 const short = (value: string, max = 150) => {
-  const text = decode(value)
-    .replace(/^[·•\-–—\s]+/, "")
+  const text = stripNoise(decode(value)
+    .replace(/^[·•\-–—\s]+/, ""))
     .replace(/(?:\.{3,}|…{2,})/g, "。")
-    .replace(/[，,]\s*[。.!！]/g, "。")
     .replace(/([。！？])\s*[·•]\s*/g, "$1")
     .replace(/#\S+/g, "")
     .replace(/欢迎关注[\s\S]*$/i, "")
@@ -284,7 +291,7 @@ const short = (value: string, max = 150) => {
   return completeSentence(cut.slice(0, boundary >= 55 ? boundary : max).replace(/[，；、\s]+$/, "").replace(/\s*(?:\.{3,}|…+)\s*$/, ""));
 };
 const cleanTitle = (value: string, sourceName = "") => {
-  let text = decode(value).replace(/(?:\.{3,}|…+)/g, " ").replace(/\s+/g, " ").trim();
+  let text = stripNoise(decode(value).replace(/(?:\.{3,}|…+)/g, " "));
   const aliases = sourceName ? [
     sourceName,
     sourceName.replace(/\s*(?:科技|新闻|中文|AI|人工智能|开发者社区|开发者|研究院|实验室|学院)$/i, ""),
@@ -294,10 +301,10 @@ const cleanTitle = (value: string, sourceName = "") => {
     text = text.replace(new RegExp(`\\s*(?:[-—–_|｜]|·)\\s*${escaped}\\s*$`, "i"), "").trim();
   });
   text = text
-    .replace(/\s*(?:[-—–_|｜]|·)\s*(?:阿里云开发者社区|腾讯云开发者社区|华为云开发者联盟|CSDN博客|掘金|光明网|新华网|人民网|中国新闻网|央视网|新浪科技|搜狐科技|网易科技|凤凰科技|澎湃新闻|极客公园|品玩|量子位|机器之心|雷峰网|Sohu|QQ News)\s*$/i, "")
+    .replace(/\s*(?:[-—–_|｜]|·)+\s*(?:阿里云开发者社区|腾讯云开发者社区|华为云开发者联盟|CSDN博客|掘金|光明网|新华网|人民网|中国新闻网|央视网|新浪科技|搜狐(?:新闻|科技)?|网易科技|凤凰科技|澎湃新闻|极客公园|品玩|量子位|机器之心|雷峰网|Sohu|QQ\s*News|腾讯新闻)(?:\s*(?:[-—–_|｜]|·))?\s*$/i, "")
     .replace(/\s*(?:[-—–_|｜]|·)\s*(?:www\.)?[\w.-]+\.(?:com|cn|net|org)(?:\.cn)?\s*$/i, "")
     .trim();
-  return text;
+  return stripNoise(text);
 };
 const splitDigestTitle = (title: string) => {
   const digest = /^(?:早报|晚报|晨报|日报|速览|今日热点|科技早知道)\s*[｜|:：]/.test(title);
@@ -358,7 +365,7 @@ async function fetchSource(source: Source, timeout = 5_500): Promise<NewsItem[]>
     const blocks = xml.match(atom ? /<entry\b[\s\S]*?<\/entry>/gi : /<item\b[\s\S]*?<\/item>/gi) ?? [];
     return blocks.slice(0, 18).flatMap((block, index) => {
       const title = cleanTitle(field(block, "title"), source.name);
-      const fullSummary = short(field(block, atom ? "summary" : "description") || field(block, "content:encoded"), 260);
+      const fullSummary = short(field(block, atom ? "summary" : "description") || field(block, "content:encoded"), 430);
       const publishedAt = decode(field(block, atom ? "published" : "pubDate") || field(block, "updated")) || new Date().toISOString();
       const baseTrust = source.tier === 1 ? 88 : source.tier === 2 ? 74 : 61;
       const imageUrl = block.match(/<(?:media:content|media:thumbnail|enclosure)\b[^>]+url=["']([^"']+)["']/i)?.[1]
