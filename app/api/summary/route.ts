@@ -6,7 +6,6 @@ type SummaryStory = {
   related?: number; sourceMentions?: string[]; publishedAt?: string;
   score?: number; trustScore?: number;
 };
-type EditorialTrend = { conclusion: string; evidenceIds: Array<number | string> };
 
 const summaryCache = new Map<string, { at: number; summary: string }>();
 const splitSentences = (value = "") =>
@@ -41,10 +40,10 @@ export async function POST(request: Request) {
       ((b.score ?? 0) + (b.trustScore ?? 0) * .35 + (b.related ?? 1) * 4) -
       ((a.score ?? 0) + (a.trustScore ?? 0) * .35 + (a.related ?? 1) * 4)
     )
-    .slice(0, 48);
+    .slice(0, 24);
   if (!stories.length) return NextResponse.json({ summary: "正在整理今天的 AI 核心趋势。" });
   const day = new Date().toISOString().slice(0, 10);
-  const cacheKey = `v7:${day}:${stories.slice(0, 20).map((story) => story.title).join("|")}`;
+  const cacheKey = `v8:${day}:${stories.slice(0, 20).map((story) => story.title).join("|")}`;
   const cached = summaryCache.get(cacheKey);
   if (cached && Date.now() - cached.at < 24 * 60 * 60_000) {
     return NextResponse.json({ summary: cached.summary, cached: true });
@@ -52,25 +51,13 @@ export async function POST(request: Request) {
 
   let summary = "";
   if (aiConfigured()) {
-    const indexedStories = stories.map((story, id) => ({ id, ...story }));
-    const prompt = "你是 AI Brief 的资深科技主编。你的任务不是摘要新闻，而是读完当天材料后给出编辑部判断。先按同一变化聚类，只保留至少有2条材料共同支持的主题，再输出3条彼此不同的结论。只返回 JSON：{\"trends\":[{\"conclusion\":\"完整结论。\",\"evidenceIds\":[0,3]}]}。每条 conclusion 为55至90个汉字，结构必须是：先说正在形成的行业变化，再解释它意味着什么；公司、模型和产品只能作为论据嵌入句中，不能写成发布清单。evidenceIds 必须填写输入材料中的数字 id，至少2个，而且这些材料必须真正支持同一结论。禁止照抄标题、逐条排列新闻、拼接无关事件、媒体名称和来源数量，禁止以数字或指代不清的词开头。优先判断能力边界、成本结构、开发范式、商业落地和竞争格局发生了什么变化。";
-    for (let attempt = 0; attempt < 2 && !summary; attempt += 1) {
-      const result = await generateJson<{ trends: EditorialTrend[] }>(
-        attempt === 0 ? prompt : `${prompt} 上一次输出未通过证据或句子质量校验；请重新聚类，确保每条 evidenceIds 有至少两个不同且相关的有效编号。`,
-        JSON.stringify({ date: day, stories: indexedStories }),
-      );
-      const trends = (result?.trends ?? []).filter((trend) =>
-        Array.isArray(trend.evidenceIds)
-        && new Set(trend.evidenceIds.map(Number).filter((id) => Number.isInteger(id) && id >= 0 && id < stories.length)).size >= 2
-        && validConclusion(/[。！？]$/.test(trend.conclusion.trim()) ? trend.conclusion.trim() : `${trend.conclusion.trim()}。`)
-      ).slice(0, 3);
-      const conclusions = trends.map((trend) => {
-        const normalized = /[。！？]$/.test(trend.conclusion.trim()) ? trend.conclusion.trim() : `${trend.conclusion.trim()}。`;
-        return splitSentences(normalized)[0] ?? "";
-      });
-      if (conclusions.length === 3 && conclusions.every(validConclusion)) {
-        summary = conclusions.join("").slice(0, 300);
-      }
+    const result = await generateJson<{ summary: string }>(
+      "你是 AI Brief 的资深科技主编。读完当天材料后，先在内部按共同变化聚类，再给出三条编辑部结论；不要逐篇摘要新闻。只返回 JSON：{\"summary\":\"结论1。结论2。结论3。\"}。必须恰好3个完整中文句子，每句50至90个汉字。每条都要先说一个由至少两则相关材料共同反映的行业变化，再说明它对能力边界、成本结构、开发范式、商业落地或竞争格局意味着什么。公司、模型和产品仅作为论据嵌入，禁止写成发布清单。禁止照抄标题、罗列新闻、拼接无关事件、媒体名称、来源数量和关注度，禁止以数字或指代不清的词开头，禁止空泛套话。",
+      JSON.stringify({ date: day, stories }),
+    );
+    const conclusions = splitSentences(result?.summary).slice(0, 3);
+    if (conclusions.length === 3 && conclusions.every(validConclusion)) {
+      summary = conclusions.join("").slice(0, 300);
     }
   }
 
