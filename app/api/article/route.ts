@@ -3,6 +3,11 @@ import { aiConfigured, generateJson } from "../../../lib/ai";
 import { safeArticleUrl } from "../../../lib/article-security";
 
 export const dynamic = "force-dynamic";
+type ArticlePayload = {
+  title: string; description: string; imageUrl: string; siteName: string; author: string;
+  publishedAt: string; aiSummary: string; keyPoints: string[]; paragraphs: string[];
+};
+const articleCache = new Map<string, { at: number; payload: ArticlePayload }>();
 
 const clean = (value = "") => value
   .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
@@ -42,6 +47,11 @@ async function articleResponse(request: Request) {
   if (!body.url) return NextResponse.json({ error: "缺少原文地址" }, { status: 400 });
   const articleUrl = safeArticleUrl(body.url);
   if (!articleUrl) return NextResponse.json({ error: "该地址不属于已配置的数据源" }, { status: 400 });
+  const cacheKey = `${articleUrl}::${body.title ?? ""}`;
+  const cached = articleCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < 24 * 60 * 60_000) {
+    return NextResponse.json(cached.payload, { headers: { "X-AI-Brief-Article-Cache": "HIT" } });
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 7_000);
   let html = "";
@@ -76,15 +86,15 @@ async function articleResponse(request: Request) {
     .filter((text) => text.length > 35 && text.length < 900)
     .filter((text) => !/版权|责任编辑|相关阅读|扫码|关注公众号|免责声明|广告/.test(text))
     .filter((text, index, items) => items.indexOf(text) === index)
-    .slice(0, 30);
-  const articleText = paragraphs.join("\n").slice(0, 18_000);
+    .slice(0, 45);
+  const articleText = paragraphs.join("\n").slice(0, 28_000);
 
   let aiSummary = description || "原文可提取内容有限，建议点击“阅读原文”查看完整报道。";
   let keyPoints = paragraphs.slice(0, 4).map((text) => sentence(text.slice(0, 180)));
   if (aiConfigured()) {
     const result = await generateJson<{ summary: string; keyPoints: string[] }>(
-      "你是严谨的科技新闻编辑。根据原文生成准确、自然、没有病句的中文摘要。summary 使用3到4个完整短句，依次说明发生了什么、关键事实、为什么重要及仍需观察之处；总长度120到220字。keyPoints 提炼3到5条完整事实句，每条只表达一个有价值的要点。不得把媒体名称当作事实，不得在句末机械重复来源名，不得截断词语，不得拼接无关事件；原文信息不足时明确说明，不得编造。",
-      JSON.stringify({ title, source: body.source, description, articleText }),
+      "你是严谨的科技新闻编辑。根据原文生成准确、自然、没有病句的中文摘要。summary 使用4到6个完整短句，依次说明发生了什么、涉及谁、关键数字或产品信息、为什么重要及仍需观察之处；总长度180到320字。keyPoints 提炼4到6条完整事实句，每条只表达一个有价值的要点。focusTitle 是用户正在阅读的独立事件；若 originalTitle 属于早报、晚报或多事件合集，只提取与 focusTitle 直接相关的段落，绝对不得混入同页其他新闻。不得把媒体名称当作事实，不得在句末机械重复来源名，不得截断词语；原文信息不足时明确说明，不得编造。",
+      JSON.stringify({ focusTitle: body.title || title, originalTitle: title, source: body.source, description, articleText }),
     );
     if (result?.summary) aiSummary = result.summary;
     if (result?.keyPoints?.length) keyPoints = result.keyPoints.map(sentence).filter((text) => text.length >= 16).slice(0, 5);
@@ -92,7 +102,10 @@ async function articleResponse(request: Request) {
     aiSummary = `${description}${/[。！？.!?]$/.test(description) ? "" : "。"} 原文重点涉及：${paragraphs.slice(0, 2).join(" ").slice(0, 300)}`;
   }
 
-  return NextResponse.json({ title, description, imageUrl, siteName, author, publishedAt, aiSummary: sentence(aiSummary), keyPoints, paragraphs: paragraphs.slice(0, 12) });
+  const payload = { title, description, imageUrl, siteName, author, publishedAt, aiSummary: sentence(aiSummary), keyPoints, paragraphs: paragraphs.slice(0, 18) };
+  articleCache.set(cacheKey, { at: Date.now(), payload });
+  while (articleCache.size > 100) articleCache.delete(articleCache.keys().next().value ?? "");
+  return NextResponse.json(payload, { headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800" } });
 }
 
 export const GET = articleResponse;
