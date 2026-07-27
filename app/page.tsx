@@ -168,7 +168,7 @@ export default function Home() {
     if (articleCache) {
       try { articleCacheRef.current = JSON.parse(articleCache); } catch { articleCacheRef.current = {}; }
     }
-    const summaryCache = window.localStorage.getItem("ai-brief-ai-summary-v2");
+    const summaryCache = window.localStorage.getItem("ai-brief-ai-summary-v3");
     if (summaryCache) {
       try {
         const cached = JSON.parse(summaryCache) as { day?: string; summary?: string };
@@ -361,10 +361,13 @@ export default function Home() {
     finally { setAsking(false); }
   };
 
-  const categories = [...new Set(topStories.map((story) => story.category))];
   const insight = topStories.length
-    ? `今天的 AI 资讯主要集中在${categories.slice(0, 2).join("与")}。${topStories[0].source}等一手来源持续释放新的产品、模型与行业信号。${topStories.some((item) => item.related >= 3) ? "部分关键事件已获得三个以上独立来源交叉印证，市场关注度正在上升。" : "部分新动态仍处于早期披露阶段，需要结合后续进展持续观察。"}整体趋势显示，AI 正从模型能力竞争进一步走向产品落地、开发工具和行业应用。`
-    : "正在整理今天的核心趋势。系统会从最新资讯中提炼模型、产品与行业变化。关键事件将结合多来源信息交叉判断。请稍候片刻。";
+    ? topStories.slice(0, 3).map((story) => {
+      const title = cleanDisplayTitle(story.title, story.source);
+      const detail = completeSummary(story.summary).match(/^[\s\S]*?[。！？.!?]/)?.[0] ?? "";
+      return completeSummary(detail && !title.includes(detail.replace(/[。！？.!?]$/, "")) ? `${title}：${detail}` : title);
+    }).join("")
+    : "正在读取最新资讯，完成后将展示今天最值得关注的三个具体变化。";
   const dailyInsight = aiInsight || insight;
   const insightTranslationKey = `__insight:${dailyInsight}`;
   const visibleInsight = contentLanguage === "en" ? translations[insightTranslationKey]?.summary ?? dailyInsight : dailyInsight;
@@ -391,8 +394,10 @@ export default function Home() {
       body: JSON.stringify({ stories: summaryStories }),
     }).then((response) => response.json()).then((data: { summary?: string }) => {
       if (data.summary) {
+        const boilerplate = /资讯主要集中在|持续释放.*信号|市场关注度正在上升|值得关注的行业动态/;
+        if (boilerplate.test(data.summary)) return;
         setAiInsight(data.summary);
-        window.localStorage.setItem("ai-brief-ai-summary-v2", JSON.stringify({
+        window.localStorage.setItem("ai-brief-ai-summary-v3", JSON.stringify({
           day: new Date().toISOString().slice(0, 10),
           summary: data.summary,
         }));
@@ -458,6 +463,7 @@ export default function Home() {
     window.localStorage.removeItem("ai-brief-translations");
     window.localStorage.removeItem("ai-brief-ai-summary");
     window.localStorage.removeItem("ai-brief-ai-summary-v2");
+    window.localStorage.removeItem("ai-brief-ai-summary-v3");
     window.localStorage.removeItem("ai-brief-article-cache");
     articleCacheRef.current = {};
     setAiInsight("");
