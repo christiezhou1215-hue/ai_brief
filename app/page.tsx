@@ -168,7 +168,7 @@ export default function Home() {
     if (articleCache) {
       try { articleCacheRef.current = JSON.parse(articleCache); } catch { articleCacheRef.current = {}; }
     }
-    const summaryCache = window.localStorage.getItem("ai-brief-ai-summary-v3");
+    const summaryCache = window.localStorage.getItem("ai-brief-ai-summary-v4");
     if (summaryCache) {
       try {
         const cached = JSON.parse(summaryCache) as { day?: string; summary?: string };
@@ -394,10 +394,10 @@ export default function Home() {
       body: JSON.stringify({ stories: summaryStories }),
     }).then((response) => response.json()).then((data: { summary?: string }) => {
       if (data.summary) {
-        const boilerplate = /资讯主要集中在|持续释放.*信号|市场关注度正在上升|值得关注的行业动态/;
+        const boilerplate = /资讯主要集中在|持续释放.*信号|市场关注度正在上升|值得关注的行业动态|^\s*\d+(?:\.\d+)?\s*(?:将|已|正|在|于)/;
         if (boilerplate.test(data.summary)) return;
         setAiInsight(data.summary);
-        window.localStorage.setItem("ai-brief-ai-summary-v3", JSON.stringify({
+        window.localStorage.setItem("ai-brief-ai-summary-v4", JSON.stringify({
           day: new Date().toISOString().slice(0, 10),
           summary: data.summary,
         }));
@@ -464,6 +464,7 @@ export default function Home() {
     window.localStorage.removeItem("ai-brief-ai-summary");
     window.localStorage.removeItem("ai-brief-ai-summary-v2");
     window.localStorage.removeItem("ai-brief-ai-summary-v3");
+    window.localStorage.removeItem("ai-brief-ai-summary-v4");
     window.localStorage.removeItem("ai-brief-article-cache");
     articleCacheRef.current = {};
     setAiInsight("");
@@ -535,8 +536,9 @@ export default function Home() {
               <h1>{active === "我的收藏" ? "我的收藏" : "今日资讯"}</h1>
               <p>{active === "我的收藏" ? "你保存的高价值内容，随时回来继续阅读。" : "从海量动态中提炼值得关注、值得相信、值得行动的事件。"}</p></div>
             </div>
-            <div className="live-cluster"><div className={`live-status ${loading || refreshing ? "working" : ""}`}><span /><b>{loading || refreshing ? syncStage : "实时更新"}</b><small>{updatedAt ? `最近同步 ${formatDate(updatedAt)}` : "准备同步"}</small></div>
+            <div className="live-cluster">
               {active === "今日资讯" && <button className={`refresh ${refreshing ? "spinning" : ""}`} onClick={() => void loadNews(true)} disabled={refreshing}><span>↻</span>{refreshing ? "同步中" : "刷新资讯"}</button>}
+              <div className={`live-status ${loading || refreshing ? "working" : ""}`}><span /><b>{loading || refreshing ? syncStage : "实时更新"}</b><small>{updatedAt ? `最近同步 ${formatDate(updatedAt)}` : "准备同步"}</small></div>
             </div>
           </section>
 
