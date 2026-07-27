@@ -6,7 +6,7 @@ type SummaryStory = {
   related?: number; sourceMentions?: string[]; publishedAt?: string;
   score?: number; trustScore?: number;
 };
-type EditorialTrend = { conclusion: string; evidenceIds: number[] };
+type EditorialTrend = { conclusion: string; evidenceIds: Array<number | string> };
 
 const summaryCache = new Map<string, { at: number; summary: string }>();
 const splitSentences = (value = "") =>
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     .slice(0, 48);
   if (!stories.length) return NextResponse.json({ summary: "正在整理今天的 AI 核心趋势。" });
   const day = new Date().toISOString().slice(0, 10);
-  const cacheKey = `v6:${day}:${stories.slice(0, 20).map((story) => story.title).join("|")}`;
+  const cacheKey = `v7:${day}:${stories.slice(0, 20).map((story) => story.title).join("|")}`;
   const cached = summaryCache.get(cacheKey);
   if (cached && Date.now() - cached.at < 24 * 60 * 60_000) {
     return NextResponse.json({ summary: cached.summary, cached: true });
@@ -61,10 +61,13 @@ export async function POST(request: Request) {
       );
       const trends = (result?.trends ?? []).filter((trend) =>
         Array.isArray(trend.evidenceIds)
-        && new Set(trend.evidenceIds.filter((id) => Number.isInteger(id) && id >= 0 && id < stories.length)).size >= 2
-        && validConclusion(trend.conclusion)
+        && new Set(trend.evidenceIds.map(Number).filter((id) => Number.isInteger(id) && id >= 0 && id < stories.length)).size >= 2
+        && validConclusion(/[。！？]$/.test(trend.conclusion.trim()) ? trend.conclusion.trim() : `${trend.conclusion.trim()}。`)
       ).slice(0, 3);
-      const conclusions = trends.map((trend) => splitSentences(trend.conclusion)[0] ?? "");
+      const conclusions = trends.map((trend) => {
+        const normalized = /[。！？]$/.test(trend.conclusion.trim()) ? trend.conclusion.trim() : `${trend.conclusion.trim()}。`;
+        return splitSentences(normalized)[0] ?? "";
+      });
       if (conclusions.length === 3 && conclusions.every(validConclusion)) {
         summary = conclusions.join("").slice(0, 300);
       }
@@ -75,7 +78,9 @@ export async function POST(request: Request) {
     summary = "今日高质量资讯仍在聚合，目前尚不足以形成三条有多项事实支撑的行业结论，请稍后刷新查看。";
   }
 
-  summaryCache.set(cacheKey, { at: Date.now(), summary });
-  while (summaryCache.size > 30) summaryCache.delete(summaryCache.keys().next().value ?? "");
+  if (splitSentences(summary).length === 3) {
+    summaryCache.set(cacheKey, { at: Date.now(), summary });
+    while (summaryCache.size > 30) summaryCache.delete(summaryCache.keys().next().value ?? "");
+  }
   return NextResponse.json({ summary, cached: false });
 }
