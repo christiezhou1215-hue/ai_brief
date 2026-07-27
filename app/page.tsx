@@ -15,6 +15,7 @@ type SourceStatus = {
 type ChatMessage = { role: "user" | "assistant"; content: string; citations?: Array<{ title: string; source: string; url: string }>; followUps?: string[] };
 type Translation = { title: string; summary: string; target: "zh" | "en" };
 type ArticleDetail = { title: string; description: string; imageUrl?: string; siteName?: string; author?: string; publishedAt?: string; aiSummary: string; keyPoints: string[]; paragraphs: string[] };
+type CachedArticle = { at: number; detail: ArticleDetail };
 
 const nav = [
   { icon: "▦", label: "今日资讯" },
@@ -84,10 +85,14 @@ export default function Home() {
   const [updatedAt, setUpdatedAt] = useState("");
   const [aiInsight, setAiInsight] = useState("");
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [importance, setImportance] = useState("全部级别");
   const [timeRange, setTimeRange] = useState("全部时间");
   const [sort, setSort] = useState("综合排序");
   const [saved, setSaved] = useState<string[]>([]);
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const [reducedSources, setReducedSources] = useState<string[]>([]);
+  const [blockedTopics, setBlockedTopics] = useState<string[]>([]);
   const [selected, setSelected] = useState<Story | null>(null);
   const [articleDetail, setArticleDetail] = useState<ArticleDetail | null>(null);
   const [articleLoading, setArticleLoading] = useState(false);
@@ -109,10 +114,15 @@ export default function Home() {
   const [topicDraft, setTopicDraft] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [motionEnabled, setMotionEnabled] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refreshMinutes, setRefreshMinutes] = useState(30);
   const [referenceNews, setReferenceNews] = useState(true);
   const [syncStage, setSyncStage] = useState("连接数据源");
   const [askStage, setAskStage] = useState("读取实时资讯");
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const articleCacheRef = useRef<Record<string, CachedArticle>>({});
 
   const loadNews = useCallback(async (manual = false, disabledOverride?: string[]) => {
     if (manual) setRefreshing(true); else setLoading(true);
@@ -142,6 +152,23 @@ export default function Home() {
   useEffect(() => {
     const stored = window.localStorage.getItem("ai-brief-saved");
     if (stored) setSaved(JSON.parse(stored));
+    const dismissedItems = window.localStorage.getItem("ai-brief-dismissed");
+    if (dismissedItems) setDismissed(JSON.parse(dismissedItems));
+    const reduced = window.localStorage.getItem("ai-brief-reduced-sources");
+    if (reduced) setReducedSources(JSON.parse(reduced));
+    const blocked = window.localStorage.getItem("ai-brief-blocked-topics");
+    if (blocked) setBlockedTopics(JSON.parse(blocked));
+    const articleCache = window.localStorage.getItem("ai-brief-article-cache");
+    if (articleCache) {
+      try { articleCacheRef.current = JSON.parse(articleCache); } catch { articleCacheRef.current = {}; }
+    }
+    const summaryCache = window.localStorage.getItem("ai-brief-ai-summary");
+    if (summaryCache) {
+      try {
+        const cached = JSON.parse(summaryCache) as { day?: string; summary?: string };
+        if (cached.day === new Date().toISOString().slice(0, 10) && cached.summary) setAiInsight(cached.summary);
+      } catch { /* ignore malformed cache */ }
+    }
     const disabled = window.localStorage.getItem("ai-brief-disabled-sources");
     const disabledList = disabled ? JSON.parse(disabled) as string[] : [];
     setDisabledSources(disabledList);
@@ -152,15 +179,31 @@ export default function Home() {
     const custom = window.localStorage.getItem("ai-brief-custom-topics");
     if (custom) setCustomTopics(JSON.parse(custom));
     setMotionEnabled(window.localStorage.getItem("ai-brief-motion") !== "off");
+    setAutoRefresh(window.localStorage.getItem("ai-brief-auto-refresh") !== "false");
+    setRefreshMinutes(Number(window.localStorage.getItem("ai-brief-refresh-minutes")) || 30);
+    setSort(window.localStorage.getItem("ai-brief-default-sort") || "综合排序");
     setReferenceNews(window.localStorage.getItem("ai-brief-reference-news") !== "false");
+    const cachedNews = window.localStorage.getItem("ai-brief-last-news");
+    if (cachedNews) {
+      try {
+        const data = JSON.parse(cachedNews) as { items: Story[]; sources: SourceStatus[]; updatedAt: string };
+        setStories(data.items ?? []); setSources(data.sources ?? []); setUpdatedAt(data.updatedAt); setLoading(false);
+      } catch { /* fetch a fresh copy below */ }
+    }
     void loadNews(false, disabledList);
   }, [loadNews]);
   useEffect(() => { window.localStorage.setItem("ai-brief-saved", JSON.stringify(saved)); }, [saved]);
+  useEffect(() => { window.localStorage.setItem("ai-brief-dismissed", JSON.stringify(dismissed)); }, [dismissed]);
+  useEffect(() => { window.localStorage.setItem("ai-brief-reduced-sources", JSON.stringify(reducedSources)); }, [reducedSources]);
+  useEffect(() => { window.localStorage.setItem("ai-brief-blocked-topics", JSON.stringify(blockedTopics)); }, [blockedTopics]);
   useEffect(() => { window.localStorage.setItem("ai-brief-disabled-sources", JSON.stringify(disabledSources)); }, [disabledSources]);
   useEffect(() => { window.localStorage.setItem("ai-brief-translations", JSON.stringify(translations)); }, [translations]);
   useEffect(() => { window.localStorage.setItem("ai-brief-topics", JSON.stringify(subscribedTopics)); }, [subscribedTopics]);
   useEffect(() => { window.localStorage.setItem("ai-brief-custom-topics", JSON.stringify(customTopics)); }, [customTopics]);
   useEffect(() => { window.localStorage.setItem("ai-brief-motion", motionEnabled ? "on" : "off"); }, [motionEnabled]);
+  useEffect(() => { window.localStorage.setItem("ai-brief-auto-refresh", String(autoRefresh)); }, [autoRefresh]);
+  useEffect(() => { window.localStorage.setItem("ai-brief-refresh-minutes", String(refreshMinutes)); }, [refreshMinutes]);
+  useEffect(() => { window.localStorage.setItem("ai-brief-default-sort", sort); }, [sort]);
   useEffect(() => { window.localStorage.setItem("ai-brief-reference-news", String(referenceNews)); }, [referenceNews]);
   useEffect(() => {
     if (!loading && !refreshing) return;
@@ -169,6 +212,11 @@ export default function Home() {
     const second = window.setTimeout(() => setSyncStage("生成今日摘要"), 2_100);
     return () => { window.clearTimeout(first); window.clearTimeout(second); };
   }, [loading, refreshing]);
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const timer = window.setInterval(() => void loadNews(true), refreshMinutes * 60_000);
+    return () => window.clearInterval(timer);
+  }, [autoRefresh, loadNews, refreshMinutes]);
   useEffect(() => {
     if (!asking) return;
     setAskStage("读取实时资讯");
@@ -179,6 +227,15 @@ export default function Home() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, asking, askStage]);
+  useEffect(() => {
+    const focusSearch = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault(); searchInputRef.current?.focus(); setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
+  }, []);
 
   const filtered = useMemo(() => {
     const result = stories.filter((story) => {
@@ -187,14 +244,17 @@ export default function Home() {
         && (importance === "全部级别" || story.level === importance)
         && (timeRange === "全部时间" || Date.now() - new Date(story.publishedAt).getTime() <= (timeRange === "24小时" ? 86_400_000 : timeRange === "3天" ? 259_200_000 : 604_800_000))
         && !disabledSources.includes(story.source)
+        && !dismissed.includes(story.id)
+        && !blockedTopics.some((topic) => matchesTopic(story, topic))
         && (active !== "我的收藏" || saved.includes(story.id));
     });
     const topicBoost = (story: Story) => active === "今日资讯" && subscribedTopics.some((topic) => matchesTopic(story, topic)) ? 1_000 : 0;
+    const sourcePenalty = (story: Story) => reducedSources.includes(story.source) ? 600 : 0;
     return result.sort((a, b) => sort === "时间优先"
       ? new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
       : sort === "多源提及优先" ? b.related - a.related
-      : (topicBoost(b) + b.score + b.trustScore * .35 + b.related * 4) - (topicBoost(a) + a.score + a.trustScore * .35 + a.related * 4));
-  }, [stories, query, importance, timeRange, disabledSources, active, saved, sort, subscribedTopics]);
+      : (topicBoost(b) + b.score + b.trustScore * .35 + b.related * 4 - sourcePenalty(b)) - (topicBoost(a) + a.score + a.trustScore * .35 + a.related * 4 - sourcePenalty(a)));
+  }, [stories, query, importance, timeRange, disabledSources, dismissed, blockedTopics, reducedSources, active, saved, sort, subscribedTopics]);
 
   const topStories = filtered.slice(0, 5);
   const pageSize = 13;
@@ -203,6 +263,11 @@ export default function Home() {
   useEffect(() => setPage(1), [query, importance, timeRange, active, sort]);
 
   const toggleSaved = (id: string) => setSaved((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id]);
+  const dismissStory = (story: Story, mode: "story" | "source" | "topic") => {
+    if (mode === "story") setDismissed((items) => [...new Set([...items, story.id])]);
+    if (mode === "source") setReducedSources((items) => [...new Set([...items, story.source])]);
+    if (mode === "topic") setBlockedTopics((items) => [...new Set([...items, story.category])]);
+  };
   const toggleSource = (name: string) => {
     const next = disabledSources.includes(name) ? disabledSources.filter((item) => item !== name) : [...disabledSources, name];
     setDisabledSources(next);
@@ -220,13 +285,29 @@ export default function Home() {
     }
     setEditingTopic(null); setTopicDraft("");
   };
+  const deleteTopic = (topic: string) => {
+    setCustomTopics((items) => items.filter((item) => item !== topic));
+    setSubscribedTopics((items) => items.filter((item) => item !== topic));
+    setBlockedTopics((items) => items.filter((item) => item !== topic));
+    if (editingTopic === topic) { setEditingTopic(null); setTopicDraft(""); }
+  };
   const displayed = (story: Story) => {
     const originalMatches = contentLanguage === "en" ? isEnglish(story) : !isEnglish(story);
     const translated = translations[story.id];
     return !originalMatches && translated?.target === contentLanguage ? translated : { title: story.title, summary: story.summary };
   };
   const openStory = (story: Story) => {
-    setSelected(story); setArticleDetail(null); setArticleLoading(true);
+    const articleKey = `${story.url}::${story.title}`;
+    const cached = articleCacheRef.current[articleKey];
+    const fallback: ArticleDetail = {
+      title: story.title, description: completeSummary(story.summary), imageUrl: story.imageUrl,
+      siteName: story.source, publishedAt: story.publishedAt,
+      aiSummary: completeSummary(story.summary), keyPoints: [], paragraphs: [],
+    };
+    setSelected(story);
+    setArticleDetail(cached?.detail ?? fallback);
+    setArticleLoading(!cached);
+    if (cached && Date.now() - cached.at < 24 * 60 * 60_000) return;
     void fetch("/api/article", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ url: story.url, title: story.title, summary: story.summary, source: story.source }),
@@ -238,7 +319,8 @@ export default function Home() {
         title?: string; description?: string; publishedAt?: string;
         imageUrl?: string; siteName?: string; author?: string; paragraphs?: string[];
         aiSummary?: string; keyPoints?: string[];
-      }) => setArticleDetail({
+      }) => {
+        const detail = {
         title: data.title || story.title,
         description: data.description || story.summary,
         imageUrl: data.imageUrl || story.imageUrl,
@@ -248,8 +330,14 @@ export default function Home() {
         aiSummary: data.aiSummary || data.description || story.summary,
         keyPoints: data.keyPoints || [],
         paragraphs: data.paragraphs || [],
-      }))
-      .catch(() => setArticleDetail(null)).finally(() => setArticleLoading(false));
+        };
+        setArticleDetail(detail);
+        articleCacheRef.current[articleKey] = { at: Date.now(), detail };
+        const entries = Object.entries(articleCacheRef.current).sort(([, a], [, b]) => b.at - a.at).slice(0, 40);
+        articleCacheRef.current = Object.fromEntries(entries);
+        window.localStorage.setItem("ai-brief-article-cache", JSON.stringify(articleCacheRef.current));
+      })
+      .catch(() => setArticleDetail((current) => current ?? fallback)).finally(() => setArticleLoading(false));
   };
   const ask = async (prompt = question) => {
     const text = prompt.trim();
@@ -284,16 +372,28 @@ export default function Home() {
   const pagedSources = filteredSources.slice((sourcePage - 1) * sourcePageSize, sourcePage * sourcePageSize);
   useEffect(() => setSourcePage(1), [sourceFilter, sourceQuery]);
   useEffect(() => {
-    if (!stories.length) return;
+    if (!stories.length || aiInsight) return;
     const controller = new AbortController();
+    const summaryStories = [...stories]
+      .sort((a, b) =>
+        (b.score + b.trustScore * .35 + b.related * 4) -
+        (a.score + a.trustScore * .35 + a.related * 4)
+      )
+      .slice(0, 48);
     void fetch("/api/summary", {
       method: "POST", signal: controller.signal, headers: { "content-type": "application/json" },
-      body: JSON.stringify({ stories: stories.slice(0, 36) }),
+      body: JSON.stringify({ stories: summaryStories }),
     }).then((response) => response.json()).then((data: { summary?: string }) => {
-      if (data.summary) setAiInsight(data.summary);
+      if (data.summary) {
+        setAiInsight(data.summary);
+        window.localStorage.setItem("ai-brief-ai-summary", JSON.stringify({
+          day: new Date().toISOString().slice(0, 10),
+          summary: data.summary,
+        }));
+      }
     }).catch(() => undefined);
     return () => controller.abort();
-  }, [stories]);
+  }, [aiInsight, stories]);
   useEffect(() => {
     if (loading || pageTranslating || !paged.length) return;
     const candidates = [...new Map([...paged, ...topStories].map((story) => [story.id, story])).values()]
@@ -329,7 +429,7 @@ export default function Home() {
       { id: `${prefix}:main`, title: articleDetail.title, summary: articleDetail.aiSummary },
       { id: `${prefix}:description`, title: "原文信息", summary: articleDetail.description },
       ...articleDetail.keyPoints.slice(0, 8).map((point, index) => ({ id: `${prefix}:point:${index}`, title: `重点 ${index + 1}`, summary: point })),
-      ...articleDetail.paragraphs.slice(0, 6).map((paragraph, index) => ({ id: `${prefix}:paragraph:${index}`, title: `正文 ${index + 1}`, summary: paragraph })),
+      ...articleDetail.paragraphs.slice(0, 10).map((paragraph, index) => ({ id: `${prefix}:paragraph:${index}`, title: `正文 ${index + 1}`, summary: paragraph })),
     ];
     const missing = items.filter((item) => translations[item.id]?.target !== contentLanguage);
     if (!missing.length) return;
@@ -350,6 +450,10 @@ export default function Home() {
   const clearContentCache = () => {
     window.localStorage.removeItem("ai-brief-last-news");
     window.localStorage.removeItem("ai-brief-translations");
+    window.localStorage.removeItem("ai-brief-ai-summary");
+    window.localStorage.removeItem("ai-brief-article-cache");
+    articleCacheRef.current = {};
+    setAiInsight("");
     setTranslations({});
     void loadNews(true);
   };
@@ -384,7 +488,31 @@ export default function Home() {
           <div className="banner-wave" aria-hidden="true">{Array.from({ length: 12 }).map((_, index) => <i key={index} />)}</div>
           <span className="banner-live"><i /> LIVE</span>
         </section>
-        <label className="global-search"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索公司、模型、产品或议题…" /><kbd>⌘ K</kbd></label>
+        <div className="search-shell">
+          <label className="global-search"><span>⌕</span><input ref={searchInputRef} value={query}
+            onFocus={() => setSearchOpen(true)}
+            onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setSearchOpen(false);
+              if (event.key === "Enter") {
+                setActive("今日资讯"); setPage(1); setSearchOpen(false);
+                window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+              }
+            }}
+            placeholder="搜索公司、模型、产品或议题…" /><kbd>⌘ K</kbd>
+          </label>
+          {searchOpen && query.trim() && <div className="search-results">
+            <div><b>找到 {filtered.length} 条相关资讯</b><button onClick={() => { setQuery(""); setSearchOpen(false); }}>清除</button></div>
+            {filtered.slice(0, 5).map((story) => <button key={story.id} onMouseDown={(event) => event.preventDefault()} onClick={() => {
+              setActive("今日资讯"); setSearchOpen(false); openStory(story);
+            }}><span>{story.source}</span><strong>{cleanDisplayTitle(story.title, story.source)}</strong><i>↗</i></button>)}
+            {!filtered.length && <p>没有直接匹配的资讯，试试公司简称、模型名称或更短的关键词。</p>}
+            {!!filtered.length && <button className="view-all-search" onClick={() => {
+              setActive("今日资讯"); setPage(1); setSearchOpen(false);
+              window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+            }}>查看全部搜索结果 →</button>}
+          </div>}
+        </div>
       </header>
 
       <div className="content page-stage" key={active}>
@@ -400,7 +528,7 @@ export default function Home() {
           </section>
 
           {active === "今日资讯" && <section className="brief-hero reveal delay-1">
-            <div className="brief-copy"><span className="hero-kicker">✦ AI 总结</span>{loading ? <h2>快速读取多个可靠信号源…</h2> : <ul className="insight-points">{insightPoints.map((point, index) => <li key={`${index}-${point}`}><i>{index + 1}</i><span>{point}</span></li>)}</ul>}</div>
+            <div className="brief-copy"><span className="hero-kicker">✦ AI 总结</span>{loading && !stories.length ? <h2>正在读取本地缓存，稍后自动同步最新资讯。</h2> : <ul className="insight-points">{insightPoints.map((point, index) => <li key={`${index}-${point}`}><i>{index + 1}</i><span>{point}</span></li>)}</ul>}</div>
             <div className="trend-stack">
               <span className="trend-title">今日重点</span>
               {topStories.slice(0, 3).map((story, i) => <button key={story.id} onClick={() => openStory(story)}><em>0{i + 1}</em><span>{cleanDisplayTitle(displayed(story).title, story.source)}</span><b>↗</b></button>)}
@@ -413,6 +541,7 @@ export default function Home() {
               <div className="topic-chips">{customTopics.map((topic) => <span className="topic-chip" key={topic}>
                 <button className={subscribedTopics.includes(topic) ? "active" : ""} onClick={() => toggleTopic(topic)}><i>{subscribedTopics.includes(topic) ? "✓" : "+"}</i>{topic}</button>
                 <button className="edit-topic" onClick={() => { setEditingTopic(topic); setTopicDraft(topic); }} aria-label={`修改${topic}`}>✎</button>
+                <button className="delete-topic" onClick={() => deleteTopic(topic)} aria-label={`删除${topic}`}>×</button>
               </span>)}<button className="add-topic" onClick={() => { setEditingTopic(""); setTopicDraft(""); }}>＋ 添加主题</button></div>
             </div>
             {editingTopic !== null && <div className="topic-editor"><input autoFocus value={topicDraft} onChange={(event) => setTopicDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveTopic(); }} placeholder="输入主题名称" maxLength={18} /><button onClick={saveTopic}>保存</button><button onClick={() => { setEditingTopic(null); setTopicDraft(""); }}>取消</button></div>}
@@ -424,7 +553,7 @@ export default function Home() {
           </section>}
 
           {error && <div className="notice"><span>!</span><p>{error}</p><button onClick={() => void loadNews(true)}>立即重试</button></div>}
-          <div className="result-meta"><span><b>{filtered.length}</b> 条资讯</span>
+          <div className="result-meta" ref={resultsRef}><span><b>{filtered.length}</b> 条资讯</span>
             <div className="result-actions"><div className={`page-language ${pageTranslating ? "loading" : ""}`} aria-label="页面语言">
               <button className={contentLanguage === "zh" ? "active" : ""} onClick={() => setContentLanguage("zh")}>中文</button>
               <button className={contentLanguage === "en" ? "active" : ""} onClick={() => setContentLanguage("en")}>EN</button>
@@ -432,13 +561,19 @@ export default function Home() {
             </div></div>
           </div>
 
-          {loading ? <div className="skeleton-grid">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton" />)}</div>
+          {loading && !stories.length ? <div className="skeleton-grid">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton" />)}</div>
             : paged.length ? <section className="story-grid editorial">
               {paged.map((story, index) => {
                 const translated = displayed(story);
                 return <article className={`story-card ${index === 0 ? "lead" : ""}`} style={{ "--card-order": index } as React.CSSProperties} key={story.id} onClick={() => openStory(story)}>
                 <div className="story-head"><span className="source-mark">{story.sourceMark}</span><div><b>{story.source}</b><small>{relative(story.publishedAt)}</small></div>
-                  <button className={`save ${saved.includes(story.id) ? "saved" : ""}`} onClick={(e) => { e.stopPropagation(); toggleSaved(story.id); }} aria-label="收藏">{saved.includes(story.id) ? "♥" : "♡"}</button>
+                  <div className="story-actions"><button className={`save ${saved.includes(story.id) ? "saved" : ""}`} onClick={(e) => { e.stopPropagation(); toggleSaved(story.id); }} aria-label="收藏">{saved.includes(story.id) ? "♥" : "♡"}</button>
+                    <details onClick={(event) => event.stopPropagation()}><summary aria-label="内容反馈">···</summary><div>
+                      <button onClick={() => dismissStory(story, "story")}>不看这条资讯</button>
+                      <button onClick={() => dismissStory(story, "source")}>减少“{story.source}”</button>
+                      <button onClick={() => dismissStory(story, "topic")}>减少“{story.category}”</button>
+                    </div></details>
+                  </div>
                 </div>
                 <div className="story-body"><div className="story-badges"><span>{story.category}</span><span className={`level ${story.level}`}>{story.level}</span></div>
                   <h2>{cleanDisplayTitle(translated.title, story.source)}</h2><p>{completeSummary(translated.summary)}</p>
@@ -452,13 +587,17 @@ export default function Home() {
 
         {active === "AI 问答" && <section className="ask-page reveal">
           <div className="ask-header"><span className="ask-orb">✦</span><span className="eyebrow">AI BRIEF RESEARCH ASSISTANT</span><h1>问清正在发生的 AI</h1><p>把新闻线索、对话背景与公开信息连接起来，给出清晰判断和可核查出处。</p></div>
+          <div className={`research-mode ${referenceNews ? "on" : ""}`}>
+            <div><span>资讯增强模式</span><b>{referenceNews ? "已开启：回答会优先引用资讯库与公开信息" : "已关闭：仅根据当前对话回答"}</b><p>开启后，DeepSeek 会检索当前聚合资讯、相关新闻和历史对话，进行多来源比较，并在答案下方附上可核查的原文出处。</p></div>
+            <button className={referenceNews ? "on" : ""} onClick={() => setReferenceNews((value) => !value)} role="switch" aria-checked={referenceNews}><i /><strong>{referenceNews ? "已开启" : "开启"}</strong></button>
+          </div>
           {!messages.length && <div className="suggestions">{["今天最重要的 AI 变化是什么？","最近有哪些新模型发布？","哪些新闻得到了多个来源印证？","总结中国 AI 行业近期趋势"].map((item) => <button key={item} onClick={() => void ask(item)}><span>↗</span>{item}</button>)}</div>}
           <div className="chat-stream">{messages.map((message, index) => <div className={`message ${message.role}`} key={index}>
             <span className="avatar">{message.role === "user" ? "你" : "✦"}</span><div>{message.role === "assistant" ? <AnswerContent content={message.content} /> : <p>{message.content}</p>}
               {message.citations?.length ? <div className="citations">{message.citations.map((citation) => <a key={citation.url} href={citation.url} target="_blank" rel="noreferrer"><b>{citation.source}</b><span>{citation.title}</span>↗</a>)}</div> : null}
               {message.role === "assistant" && message.followUps?.length ? <div className="follow-ups"><span>继续研究</span>{message.followUps.map((item) => <button key={item} onClick={() => void ask(item)} disabled={asking}><i>↗</i>{item}</button>)}</div> : null}
             </div></div>)}{asking && <div className="message assistant generating"><span className="avatar">✦</span><div className="thinking"><span>{askStage}</span><div><i /><i /><i /></div><b><em /></b></div></div>}<div ref={chatEndRef} /></div>
-          <div className="ask-composer"><textarea value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(); } }} placeholder="问任何关于 AI 行业、产品、模型或趋势的问题…" /><div><button className={`composer-source-switch ${referenceNews ? "on" : ""}`} onClick={() => setReferenceNews((value) => !value)} role="switch" aria-checked={referenceNews}><i /><span>参考 AI 资讯</span></button><span>Enter 发送</span><button onClick={() => void ask()} disabled={!question.trim() || asking}>发送 <b>↑</b></button></div></div>
+          <div className="ask-composer"><textarea value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(); } }} placeholder="问任何关于 AI 行业、产品、模型或趋势的问题…" /><div><span>{referenceNews ? "将结合资讯库与公开信息 · Enter 发送" : "仅根据当前对话 · Enter 发送"}</span><button onClick={() => void ask()} disabled={!question.trim() || asking}>发送 <b>↑</b></button></div></div>
         </section>}
 
         {active === "数据源网络" && <section className="sources-page reveal">
@@ -488,7 +627,8 @@ export default function Home() {
           <div className="settings-grid">
             <section className="settings-card admin-card"><span className="settings-label">管理员</span><div className="admin-profile"><i>周</i><div><h3>周 玉川</h3><p>AI Brief 管理员</p></div><b>OWNER</b></div><div className="admin-meta"><span>工作区<b>AI Brief</b></span><span>数据网络<b>{sources.length || 218} 个来源</b></span><span>在线状态<b>{sources.filter((item) => item.ok).length} 个在线</b></span></div></section>
             <section className="settings-card model-card"><span className="settings-label">AI 模型</span><div className="model-status"><i>◆</i><div><h3>DeepSeek</h3><p>总结、翻译、详情摘要与研究问答</p></div><span><i /> 已连接</span></div><small>模型密钥由 Vercel Production 环境安全管理，不写入浏览器或 GitHub。</small></section>
-            <section className="settings-card preference-card"><span className="settings-label">阅读偏好</span><div className="setting-row"><div><b>默认内容语言</b><small>切换首页和收藏内容的展示语言</small></div><div className="setting-options"><button className={contentLanguage === "zh" ? "active" : ""} onClick={() => setContentLanguage("zh")}>中文</button><button className={contentLanguage === "en" ? "active" : ""} onClick={() => setContentLanguage("en")}>English</button></div></div><div className="setting-row"><div><b>界面动效</b><small>控制页面切换、信号波形与卡片反馈</small></div><button className={`settings-toggle ${motionEnabled ? "on" : ""}`} onClick={() => setMotionEnabled((value) => !value)} role="switch" aria-checked={motionEnabled}><i /></button></div></section>
+            <section className="settings-card preference-card"><span className="settings-label">阅读偏好</span><div className="setting-row"><div><b>默认内容语言</b><small>切换首页和收藏内容的展示语言</small></div><div className="setting-options"><button className={contentLanguage === "zh" ? "active" : ""} onClick={() => setContentLanguage("zh")}>中文</button><button className={contentLanguage === "en" ? "active" : ""} onClick={() => setContentLanguage("en")}>English</button></div></div><div className="setting-row"><div><b>界面动效</b><small>控制页面切换、信号波形与卡片反馈</small></div><button className={`settings-toggle ${motionEnabled ? "on" : ""}`} onClick={() => setMotionEnabled((value) => !value)} role="switch" aria-checked={motionEnabled}><i /></button></div><div className="setting-row"><div><b>内容反馈</b><small>已隐藏 {dismissed.length} 条，已降低 {reducedSources.length} 个来源和 {blockedTopics.length} 个主题</small></div><button className="reset-feedback" disabled={!dismissed.length && !reducedSources.length && !blockedTopics.length} onClick={() => { setDismissed([]); setReducedSources([]); setBlockedTopics([]); }}>恢复全部</button></div></section>
+            <section className="settings-card preference-card"><span className="settings-label">更新与排序</span><div className="setting-row"><div><b>自动更新资讯</b><small>{autoRefresh ? `每 ${refreshMinutes} 分钟在后台同步一次` : "仅在点击刷新资讯时同步"}</small></div><button className={`settings-toggle ${autoRefresh ? "on" : ""}`} onClick={() => setAutoRefresh((value) => !value)} role="switch" aria-checked={autoRefresh}><i /></button></div><div className="setting-row"><div><b>更新频率</b><small>调整自动同步间隔</small></div><div className="setting-options">{[15,30,60].map((minutes) => <button key={minutes} className={refreshMinutes === minutes ? "active" : ""} onClick={() => setRefreshMinutes(minutes)}>{minutes} 分钟</button>)}</div></div><div className="setting-row"><div><b>默认首页排序</b><small>设置每次打开网站时的默认信息流顺序</small></div><div className="setting-options">{[["综合排序","精选"],["时间优先","最新"],["多源提及优先","多源"]].map(([value,label]) => <button key={value} className={sort === value ? "active" : ""} onClick={() => setSort(value)}>{label}</button>)}</div></div></section>
             <section className="settings-card cache-card"><span className="settings-label">内容缓存</span><h3>刷新本地内容</h3><p>清理翻译和上次资讯缓存，并立即重新获取最新内容。收藏与主题订阅不会受到影响。</p><button onClick={clearContentCache}>清理并重新同步 ↻</button></section>
           </div>
         </section>}
@@ -504,7 +644,8 @@ export default function Home() {
         <h2>{cleanDisplayTitle(translations[`__detail:${selected.id}:main`]?.target === contentLanguage ? translations[`__detail:${selected.id}:main`].title : displayed(selected).title || articleDetail?.title || selected.title, selected.source)}</h2>
         <div className="original-meta"><span>{articleDetail?.siteName || selected.source}</span>{articleDetail?.author && <span>作者：{articleDetail.author}</span>}<span>{formatDate(articleDetail?.publishedAt || selected.publishedAt)}</span></div>
         <section className="drawer-section ai-summary"><span>AI 总结摘要</span>
-          {articleLoading ? <div className="summary-loading">正在读取原文并生成摘要…</div> : detailTranslating ? <div className="summary-loading">正在翻译完整详情…</div> : <p>{translations[`__detail:${selected.id}:main`]?.target === contentLanguage ? translations[`__detail:${selected.id}:main`].summary : articleDetail?.aiSummary || displayed(selected).summary || selected.summary}</p>}
+          {articleLoading && <div className="detail-progress"><i />正在补充原文与深度摘要，现有信息可先阅读</div>}
+          {detailTranslating ? <div className="summary-loading">正在翻译完整详情…</div> : <p>{translations[`__detail:${selected.id}:main`]?.target === contentLanguage ? translations[`__detail:${selected.id}:main`].summary : articleDetail?.aiSummary || displayed(selected).summary || selected.summary}</p>}
           {!!articleDetail?.keyPoints?.length && <ul>{articleDetail.keyPoints.map((point, index) => {
             const translatedPoint = translations[`__detail:${selected.id}:point:${index}`];
             const sentence = oneSentence(translatedPoint?.target === contentLanguage ? translatedPoint.summary : point);
@@ -514,7 +655,7 @@ export default function Home() {
         {selected.related >= 3 && <section className="evidence-box"><span>多源验证</span><h3>{selected.related} 个独立来源提及此事件</h3><p>{selected.sourceMentions.join("、")}</p></section>}
         <section className="drawer-section original-content"><span>原文信息</span>
           <p>{translations[`__detail:${selected.id}:description`]?.target === contentLanguage ? translations[`__detail:${selected.id}:description`].summary : articleDetail?.description ?? displayed(selected).summary}</p>
-          {articleDetail?.paragraphs?.slice(0, 6).map((paragraph, index) => {
+          {articleDetail?.paragraphs?.slice(0, 10).map((paragraph, index) => {
             const translatedParagraph = translations[`__detail:${selected.id}:paragraph:${index}`];
             return <p key={`${index}-${paragraph.slice(0, 20)}`}>{translatedParagraph?.target === contentLanguage ? translatedParagraph.summary : paragraph}</p>;
           })}
