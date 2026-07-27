@@ -8,10 +8,20 @@ type SummaryStory = {
 };
 
 const summaryCache = new Map<string, { at: number; summary: string }>();
+const cleanStoryText = (value = "") => value
+  .replace(/^\s*(?:[（(]?\d{1,2}[)）]?\s*[、,，.:：\-]\s*)+/, "")
+  .replace(/\s*(?:[-—–_|｜·]\s*)+(?:Sohu|搜狐(?:新闻|科技)?|QQ\s*News|腾讯新闻|新华网|光明网|人民网)(?:\s*[-—–_|｜·])?\s*$/gi, "")
+  .replace(/([A-Za-z]+-\d+(?:\.\d+)*)\.(?=\s*$)/, "$1")
+  .replace(/[，,]\s*[。.!！]/g, "。")
+  .replace(/\s+/g, " ").trim();
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({})) as { stories?: SummaryStory[] };
-  const stories = (body.stories ?? [])
+  const stories = (body.stories ?? []).map((story) => ({
+    ...story,
+    title: cleanStoryText(story.title),
+    summary: cleanStoryText(story.summary),
+  }))
     .sort((a, b) =>
       ((b.score ?? 0) + (b.trustScore ?? 0) * .35 + (b.related ?? 1) * 4) -
       ((a.score ?? 0) + (a.trustScore ?? 0) * .35 + (a.related ?? 1) * 4)
@@ -19,7 +29,7 @@ export async function POST(request: Request) {
     .slice(0, 48);
   if (!stories.length) return NextResponse.json({ summary: "正在整理今天的 AI 核心趋势。" });
   const day = new Date().toISOString().slice(0, 10);
-  const cacheKey = `${day}:${stories.slice(0, 12).map((story) => story.title).join("|")}`;
+  const cacheKey = `v2:${day}:${stories.slice(0, 12).map((story) => story.title).join("|")}`;
   const cached = summaryCache.get(cacheKey);
   if (cached && Date.now() - cached.at < 24 * 60 * 60_000) {
     return NextResponse.json({ summary: cached.summary, cached: true });
@@ -50,7 +60,7 @@ export async function POST(request: Request) {
       return "相关变化正在影响企业投入与产品落地节奏";
     };
     summary = distinct.map((story) => {
-      const title = story.title.replace(/\s*[-—|｜].*$/, "").slice(0, 42);
+      const title = story.title.slice(0, 42);
       return `${title}，${impactFor(story.category)}${(story.related ?? 1) >= 3 ? "" : "，但仍需后续验证"}。`;
     }).join("");
   }
