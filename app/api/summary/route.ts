@@ -8,6 +8,15 @@ type SummaryStory = {
 };
 
 const summaryCache = new Map<string, { at: number; summary: string }>();
+const splitSentences = (value = "") =>
+  (value.match(/[^。！？]+[。！？]/g) ?? []).map((sentence) => sentence.trim());
+const invalidSummary = /资讯主要集中在|持续释放.*信号|市场关注度正在上升|值得关注的行业动态|等一手来源|^\s*\d+(?:\.\d+)?\s*(?:将|已|正|在|于)/;
+const validConclusion = (sentence: string) =>
+  sentence.length >= 38
+  && sentence.length <= 110
+  && !invalidSummary.test(sentence)
+  && !/^(?:这|其|该|相关|部分|多家|一些)(?:一|些|项|类|领域|公司|模型)?/.test(sentence)
+  && /因此|意味着|表明|显示|推动|加速|转向|进入|正在|开始|从.+走向|竞争|成本|能力|落地|格局/.test(sentence);
 const cleanStoryText = (value = "") => value
   .replace(/^\s*(?:[（(]?\d{1,2}[)）]?\s*[、,，.:：\-]\s*)+/, "")
   .replace(/\s*(?:[-—–_|｜·]\s*)+(?:Sohu|搜狐(?:新闻|科技)?|QQ\s*News|腾讯新闻|新华网|光明网|人民网)(?:\s*[-—–_|｜·])?\s*$/gi, "")
@@ -29,7 +38,7 @@ export async function POST(request: Request) {
     .slice(0, 48);
   if (!stories.length) return NextResponse.json({ summary: "正在整理今天的 AI 核心趋势。" });
   const day = new Date().toISOString().slice(0, 10);
-  const cacheKey = `v3:${day}:${stories.slice(0, 12).map((story) => story.title).join("|")}`;
+  const cacheKey = `v4:${day}:${stories.slice(0, 16).map((story) => story.title).join("|")}`;
   const cached = summaryCache.get(cacheKey);
   if (cached && Date.now() - cached.at < 24 * 60 * 60_000) {
     return NextResponse.json({ summary: cached.summary, cached: true });
@@ -38,19 +47,20 @@ export async function POST(request: Request) {
   let summary = "";
   if (aiConfigured()) {
     const result = await generateJson<{ summary: string }>(
-      "你是 AI Brief 的资深科技主编。只返回 JSON：{\"summary\":\"句1。句2。句3。\"}。必须恰好写3个完整中文句子，每句45至78个汉字。每句必须构成一个真正的行业趋势判断，结构为：正在发生的具体变化＋1至2个代表性公司、模型或产品事实＋这对行业、产品或开发者意味着什么。三个句子分别覆盖不同方向，优先选择会影响模型能力、成本、开发方式、商业落地或竞争格局的变化。必须使用输入中的具体事实，不得只写分类、来源数量、关注度或“发布了新产品”。不要出现媒体名称，不要写“资讯主要集中在”“持续释放信号”“市场关注度正在上升”“值得关注”等套话，不要把无关事件拼接。事实只有单一来源时使用审慎措辞。",
+      "你是 AI Brief 的资深科技主编。先在内部把当天资讯按同一议题聚类，再归纳三条编辑部结论；不要逐条复述新闻。只返回 JSON：{\"summary\":\"结论1。结论2。结论3。\"}。必须恰好写3个完整中文句子，每句45至85个汉字。每条结论必须综合至少2条相互关联的资讯，并包含：明确的行业变化、具体公司/模型/产品证据，以及这个变化对竞争格局、成本、开发方式或商业落地的意义。句首必须出现明确主体或明确行业领域，禁止以数字、代词、“部分”“多家”开头，禁止省略模型名称。不要罗列三条新闻，不要照抄标题，不要拼接无关事件，不要使用媒体名称、来源数量和关注度。禁止“资讯主要集中在”“持续释放信号”“市场关注度正在上升”“值得关注”等空泛表述。若某个议题不足2条相关资讯，不要把它写成结论。",
       JSON.stringify({ date: day, stories }),
     );
-    const boilerplate = /资讯主要集中在|持续释放.*信号|市场关注度正在上升|值得关注的行业动态|等一手来源/;
-    if (result?.summary && !boilerplate.test(result.summary) && (result.summary.match(/[。！？]/g)?.length ?? 0) >= 3) {
-      summary = (result.summary.match(/[^。！？]+[。！？]/g) ?? []).slice(0, 3).join("").slice(0, 270);
+    const conclusions = splitSentences(result?.summary).slice(0, 3);
+    if (conclusions.length === 3 && conclusions.every(validConclusion)) {
+      summary = conclusions.join("").slice(0, 300);
     }
   }
 
   if (!summary) {
-    const distinct = stories.filter((story, index, list) =>
-      list.findIndex((item) => item.category === story.category) === index
-    ).slice(0, 3);
+    const grouped = [...new Map(stories.map((story) => [story.category, [] as SummaryStory[]])).entries()]
+      .map(([category]) => ({ category, items: stories.filter((story) => story.category === category) }))
+      .filter((group) => group.items.length >= 2)
+      .slice(0, 3);
     const impactFor = (category: string) => {
       if (category === "模型发布") return "模型能力、调用成本与开发选择将随之变化";
       if (category === "AI Agent") return "智能体正在从演示走向可执行的业务流程";
@@ -60,11 +70,13 @@ export async function POST(request: Request) {
       if (category === "开源项目") return "开发者可用的模型与工具选择正在扩大";
       return "相关变化正在影响企业投入与产品落地节奏";
     };
-    summary = distinct.map((story) => {
-      const title = story.title.slice(0, 48);
-      const fact = story.summary.match(/^[\s\S]*?[。！？.!?]/)?.[0]?.replace(/[。！？.!?]$/, "") ?? "";
-      return `${title}${fact && !title.includes(fact) ? `，${fact}` : ""}；${impactFor(story.category)}${(story.related ?? 1) >= 3 ? "" : "，但仍需后续验证"}。`;
+    summary = grouped.map(({ category, items }) => {
+      const subjects = items.slice(0, 2).map((story) => story.title.replace(/[：:｜|].*$/, "").slice(0, 22));
+      return `${category}领域的多项进展显示，${subjects.join("与")}正在形成同向变化，${impactFor(category)}。`;
     }).join("");
+    if (splitSentences(summary).length < 3) {
+      summary = "今日资讯仍在形成可交叉验证的主题，目前不足以得出三条可靠的行业结论，请稍后刷新查看。";
+    }
   }
 
   summaryCache.set(cacheKey, { at: Date.now(), summary });
