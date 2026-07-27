@@ -438,6 +438,8 @@ body{background:
 /* Readability, balanced header and softer controls */
 .topbar .signal-banner{max-width:none;min-width:0;flex:1}
 .topbar .global-search{flex:0 0 min(285px,24vw)}
+.topbar .search-shell{flex:0 0 min(285px,24vw);width:auto}
+.topbar .search-shell .global-search{width:100%;margin-left:0}
 .live-cluster{display:flex;align-items:center;justify-content:flex-end;gap:13px}
 .live-cluster .refresh{flex:0 0 auto}
 .calendar-date{height:54px;padding:0 15px;gap:11px}
