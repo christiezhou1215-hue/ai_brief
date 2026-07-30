@@ -42,7 +42,10 @@ const evidenceIsRelated = (
       const leftTokens = meaningfulTokens(`${evidence[left].title} ${evidence[left].summary}`);
       const sharedTokens = [...meaningfulTokens(`${evidence[right].title} ${evidence[right].summary}`)]
         .filter((token) => leftTokens.has(token));
-      if (sharedEntity || sharedTokens.length >= 1 || (evidence[left].eventKey && evidence[left].eventKey === evidence[right].eventKey)) return true;
+      const sharedEditorialTheme = evidence[left].category === evidence[right].category
+        && /^(?:模型发布|AI Agent|AI 编程|多模态|开源项目|学术研究)$/.test(evidence[left].category);
+      if (sharedEntity || sharedTokens.length >= 1 || sharedEditorialTheme
+        || (evidence[left].eventKey && evidence[left].eventKey === evidence[right].eventKey)) return true;
     }
   }
   return false;
