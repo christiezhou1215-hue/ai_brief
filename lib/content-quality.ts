@@ -35,10 +35,30 @@ export const stripSourceSuffix = (value = "", source = "") => {
 export const cleanContentText = (value = "", source = "") =>
   stripSourceSuffix(value, source)
     .replace(/^\s*(?:[（(]?\d{1,2}[)）]?\s*[、,，.:：\-]\s*)+/, "")
+    .replace(/(^|[。！？；]\s*)\d{1,2}\s*[、，]\s*/g, "$1")
     .replace(/(?:\.{3,}|…{2,})\s*$/g, "")
     .replace(/[，,]\s*[。.!！]/g, "。")
     .replace(/\s+/g, " ")
     .trim();
+
+export const hasBrokenFactFragment = (value = "") => {
+  const text = cleanContentText(value);
+  const pairs: Array<[string, string]> = [["（", "）"], ["(", ")"], ["“", "”"], ["《", "》"], ["「", "」"], ["【", "】"]];
+  const unbalanced = pairs.some(([open, close]) => text.split(open).length !== text.split(close).length);
+  const punctuationRuns = (text.match(/[，。！？；：、,.!?;:/｜—-]/g) ?? []).length;
+  const clauses = text.split(/[。！？；]/).map((item) => item.trim()).filter(Boolean);
+  return unbalanced
+    || (text.length > 20 && punctuationRuns / text.length > .22)
+    || clauses.some((clause) => clause.length <= 2 && !/^(AI|AGI|API|芯片|模型)$/i.test(clause))
+    || /(?:^|[，。；：、\s])\d{1,3}\s*[、，]\s*/.test(text)
+    || /\b[A-Za-z][A-Za-z0-9_-]*[-_]?\d+(?:\.\s*(?:$|[a-z])|[./]\s*$)/i.test(text)
+    || /\b[A-Za-z][A-Za-z0-9_-]{1,30}\.\s+[a-z]{1,4}(?:\b|$)/.test(text)
+    || /(?:^|[^\d])\d+\.(?!\d|[。！？\s]|$)/.test(text)
+    || /(?:涨|跌|增长|下降|提升|降低|减少|增加)(?:超|约)?\s*\d+\.(?!\d)/.test(text)
+    || /(?:^|[。！？；])[^。！？；]{0,8}(?:\.|。)(?:$|\s)/.test(text)
+    || /[/｜]\s*(?:[\u4e00-\u9fff]{2,}|[A-Z][A-Za-z0-9_-]+)/.test(text)
+    || /(?:^|[。！？；])(?:以及|同时|此外|其中|并且|但|而|与|和|或)\s*[。！？；]?$/.test(text);
+};
 
 export const completeSentences = (value = "") =>
   cleanContentText(value).match(/[^。！？.!?]+[。！？.!?]/g)?.map((item) => item.trim()).filter(Boolean) ?? [];
