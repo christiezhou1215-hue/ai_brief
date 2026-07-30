@@ -12,6 +12,10 @@ export const hasEncodingGarbage = (value = "") =>
 
 export const stripSourceSuffix = (value = "", source = "") => {
   let text = value.trim();
+  if (source.trim().length >= 2) {
+    const directSource = escapeRegExp(source.trim());
+    text = text.replace(new RegExp(`\\s+(?:${directSource})[.。]?\\s*$`, "i"), "").trim();
+  }
   const aliases = [
     source,
     source.replace(/\s*(?:科技|新闻|中文|AI|人工智能|开发者社区|开发者|研究院|实验室|学院)$/i, ""),
