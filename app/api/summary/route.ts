@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { aiConfigured, generateJson } from "../../../lib/ai";
+import { cleanContentText, hasEncodingGarbage, isQualitySummary } from "../../../lib/content-quality";
 
 type SummaryStory = {
   title: string; source: string; summary: string; category: string;
@@ -17,36 +18,32 @@ const validConclusion = (sentence: string) =>
   && !invalidSummary.test(sentence)
   && !/^(?:这|其|该|相关|部分|多家|一些)(?:一|些|项|类|领域|公司|模型)?/.test(sentence)
   && /因此|意味着|表明|显示|推动|加速|转向|进入|正在|开始|从.+走向|竞争|成本|能力|落地|格局/.test(sentence);
-const cleanStoryText = (value = "") => value
-  .replace(/^\s*(?:[（(]?\d{1,2}[)）]?\s*[、,，.:：\-]\s*)+/, "")
-  .replace(/\s*(?:[-—–_|｜·]\s*)+(?:Sohu|搜狐(?:新闻|科技)?|QQ\s*News|腾讯新闻|新华网|光明网|人民网)(?:\s*[-—–_|｜·])?\s*$/gi, "")
-  .replace(/([A-Za-z]+-\d+(?:\.\d+)*)\.(?=\s*$)/, "$1")
-  .replace(/[，,]\s*[。.!！]/g, "。")
-  .replace(/\s+/g, " ").trim();
+const cleanStoryText = (value = "", source = "") => cleanContentText(value, source);
 
-export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({})) as { stories?: SummaryStory[] };
-  const stories = (body.stories ?? []).map((story) => ({
+async function createSummary(inputStories: SummaryStory[]) {
+  const stories = inputStories.map((story) => ({
     ...story,
-    title: cleanStoryText(story.title),
-    summary: cleanStoryText(story.summary),
+    title: cleanStoryText(story.title, story.source),
+    summary: cleanStoryText(story.summary, story.source),
   }))
     .filter((story) =>
       !/早报|晚报|日报|周报|月报|盘点|合集|一文看懂/.test(story.title)
       && (story.summary.length >= 42 || (story.related ?? 1) >= 2)
       && cleanStoryText(story.summary) !== cleanStoryText(story.title)
+      && !hasEncodingGarbage(`${story.title}${story.summary}`)
+      && isQualitySummary(story.summary, 32)
     )
     .sort((a, b) =>
       ((b.score ?? 0) + (b.trustScore ?? 0) * .35 + (b.related ?? 1) * 4) -
       ((a.score ?? 0) + (a.trustScore ?? 0) * .35 + (a.related ?? 1) * 4)
     )
     .slice(0, 24);
-  if (!stories.length) return NextResponse.json({ summary: "正在整理今天的 AI 核心趋势。" });
+  if (!stories.length) return { summary: "正在整理今天的 AI 核心趋势。", cached: false };
   const day = new Date().toISOString().slice(0, 10);
   const cacheKey = `v8:${day}:${stories.slice(0, 20).map((story) => story.title).join("|")}`;
   const cached = summaryCache.get(cacheKey);
   if (cached && Date.now() - cached.at < 24 * 60 * 60_000) {
-    return NextResponse.json({ summary: cached.summary, cached: true });
+    return { summary: cached.summary, cached: true };
   }
 
   let summary = "";
@@ -56,7 +53,9 @@ export async function POST(request: Request) {
       JSON.stringify({ date: day, stories }),
     );
     const conclusions = splitSentences(result?.summary).slice(0, 3);
-    if (conclusions.length === 3 && conclusions.every(validConclusion)) {
+    if (conclusions.length === 3 && conclusions.every((sentence) =>
+      validConclusion(sentence) && isQualitySummary(sentence, 38) && !hasEncodingGarbage(sentence)
+    )) {
       summary = conclusions.join("").slice(0, 300);
     }
   }
@@ -69,5 +68,29 @@ export async function POST(request: Request) {
     summaryCache.set(cacheKey, { at: Date.now(), summary });
     while (summaryCache.size > 30) summaryCache.delete(summaryCache.keys().next().value ?? "");
   }
-  return NextResponse.json({ summary, cached: false });
+  return { summary, cached: false };
+}
+
+export async function POST(request: Request) {
+  const body = await request.json().catch(() => ({})) as { stories?: SummaryStory[] };
+  return NextResponse.json(await createSummary(body.stories ?? []), {
+    headers: { "Cache-Control": "private, no-store" },
+  });
+}
+
+export async function GET(request: Request) {
+  const origin = new URL(request.url).origin;
+  const response = await fetch(`${origin}/api/news`, {
+    headers: { accept: "application/json" },
+    next: { revalidate: 900 },
+  });
+  if (!response.ok) return NextResponse.json({ summary: "", error: "news unavailable" }, { status: 503 });
+  const data = await response.json() as { items?: SummaryStory[] };
+  const result = await createSummary(data.items ?? []);
+  return NextResponse.json(result, {
+    headers: {
+      "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=86400",
+      "X-AI-Brief-Precomputed": "1",
+    },
+  });
 }
