@@ -681,9 +681,7 @@ export async function GET(request: Request) {
       ...(item.related >= 3 ? [`${item.related} 个独立来源交叉提及`] : []),
       ...(item.trustScore >= 82 ? ["一手或高质量来源"] : []),
       ...(item.score >= 84 ? ["行业影响评分较高"] : []),
-      ...(item.selectionEvidence.hasNewFact ? ["相比已有信息增加了新事实"] : []),
       ...(ageHours <= 24 ? ["24 小时内发布"] : []),
-      ...(/\d+(?:\.\d+)?%?|20\d{2}年|\d+亿元|\d+亿美元|\d+[万亿]/.test(`${item.title}${item.summary}`) ? ["包含明确数据或时间"] : []),
     ];
     item.recommendationReasons = [...new Set(reasons)].slice(0, 3);
     return item;
