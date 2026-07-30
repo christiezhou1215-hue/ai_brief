@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { aiConfigured, generateJson } from "../../../lib/ai";
 import { safeArticleUrl } from "../../../lib/article-security";
+import { cleanContentText, finishSentence, hasEncodingGarbage, isQualitySummary, isQualityTitle } from "../../../lib/content-quality";
 
 export const dynamic = "force-dynamic";
 type ArticlePayload = {
   title: string; description: string; imageUrl: string; siteName: string; author: string;
   publishedAt: string; aiSummary: string; keyPoints: string[]; paragraphs: string[];
+  structuredEvidence: {
+    hasNewFact: boolean; coreChange: string; entities: string[]; containsSpecifics: boolean;
+    industryImpact: string; uncertainties: string[]; likelyRepost: boolean; marketingRisk: boolean;
+  };
 };
 const articleCache = new Map<string, { at: number; payload: ArticlePayload }>();
 
@@ -84,7 +89,8 @@ async function articleResponse(request: Request) {
     }
   } catch { /* fall back to feed data */ }
 
-  const title = stripNoise(meta(html, ["og:title", "twitter:title"]) || body.title || "原文资讯");
+  const rawTitle = meta(html, ["og:title", "twitter:title"]) || body.title || "原文资讯";
+  const title = cleanContentText(stripNoise(rawTitle), body.source);
   const description = sentence(meta(html, ["og:description", "twitter:description", "description"]) || body.summary || "");
   const imageUrl = meta(html, ["og:image", "twitter:image", "twitter:image:src"]);
   const siteName = meta(html, ["og:site_name", "application-name"]);
@@ -126,18 +132,61 @@ async function articleResponse(request: Request) {
 
   let aiSummary = description || "原文可提取内容有限，建议点击“阅读原文”查看完整报道。";
   let keyPoints = paragraphs.slice(0, 4).map((text) => sentence(text.slice(0, 180)));
+  let structuredEvidence: ArticlePayload["structuredEvidence"] = {
+    hasNewFact: false,
+    coreChange: sentence(body.title || title),
+    entities: [],
+    containsSpecifics: /\d|API|开源|发布|上线/i.test(`${title}${description}`),
+    industryImpact: "需要结合更多来源判断这项变化对行业竞争、成本或产品落地的实际影响。",
+    uncertainties: ["当前证据主要来自已抓取原文，后续进展仍需持续验证。"],
+    likelyRepost: /转载|综合自|据.*报道|援引/i.test(articleText),
+    marketingRisk: /限时|优惠|扫码|领取|必看|震撼/i.test(articleText),
+  };
   if (aiConfigured()) {
-    const result = await generateJson<{ summary: string; keyPoints: string[] }>(
-      "你是严谨的科技新闻编辑。根据原文生成准确、自然、没有病句的中文摘要。summary 必须使用5到7个完整短句，总长度240到420字，依次写清事件背景、核心动作、关键产品或技术信息、数字与时间、实际影响以及仍待验证之处。keyPoints 提炼5到7条完整事实句，每条只表达一个有价值的要点。focusTitle 是用户正在阅读的独立事件；若 originalTitle 属于早报、晚报或多事件合集，只提取与 focusTitle 直接相关的段落，绝对不得混入同页其他新闻。删除标题编号以及 Sohu、QQ News 等媒体尾缀；不得把媒体名称当作事实，不得截断模型名称或版本号，不得编造。",
+    const result = await generateJson<{
+      summary: string; keyPoints: string[]; structuredEvidence?: ArticlePayload["structuredEvidence"];
+    }>(
+      "你是严谨的科技新闻证据提取器，不负责决定新闻是否可信，也不直接给总分。根据原文生成准确、自然、没有病句的中文摘要，并输出结构化证据。summary 必须使用5到7个完整短句，总长度240到420字，依次写清事件背景、核心动作、关键产品或技术信息、数字与时间、实际影响以及仍待验证之处。keyPoints 提炼5到7条完整事实句。structuredEvidence 必须包含 hasNewFact、coreChange、entities、containsSpecifics、industryImpact、uncertainties、likelyRepost、marketingRisk。focusTitle 是用户正在阅读的独立事件；若 originalTitle 属于早报、晚报或多事件合集，只提取与 focusTitle 直接相关的段落。删除标题编号以及媒体尾缀；不得把媒体名称当作事实，不得截断模型名称或版本号，不得编造。",
       JSON.stringify({ focusTitle: body.title || title, originalTitle: title, source: body.source, description, articleText }),
     );
-    if (result?.summary) aiSummary = result.summary;
-    if (result?.keyPoints?.length) keyPoints = result.keyPoints.map(sentence).filter((text) => text.length >= 16).slice(0, 5);
+    if (result?.summary && isQualitySummary(result.summary, 180) && !hasEncodingGarbage(result.summary)) {
+      aiSummary = result.summary;
+    }
+    if (result?.keyPoints?.length) keyPoints = result.keyPoints
+      .map((item) => finishSentence(item))
+      .filter((text) => text.length >= 16 && isQualitySummary(text, 16) && !hasEncodingGarbage(text))
+      .slice(0, 7);
+    if (result?.structuredEvidence?.coreChange) structuredEvidence = {
+      hasNewFact: Boolean(result.structuredEvidence.hasNewFact),
+      coreChange: finishSentence(result.structuredEvidence.coreChange),
+      entities: (result.structuredEvidence.entities ?? []).filter(Boolean).slice(0, 10),
+      containsSpecifics: Boolean(result.structuredEvidence.containsSpecifics),
+      industryImpact: finishSentence(result.structuredEvidence.industryImpact || structuredEvidence.industryImpact),
+      uncertainties: (result.structuredEvidence.uncertainties ?? []).map(finishSentence).filter(Boolean).slice(0, 5),
+      likelyRepost: Boolean(result.structuredEvidence.likelyRepost),
+      marketingRisk: Boolean(result.structuredEvidence.marketingRisk),
+    };
   } else if (articleText) {
     aiSummary = `${description}${/[。！？.!?]$/.test(description) ? "" : "。"} 原文重点涉及：${paragraphs.slice(0, 2).join(" ").slice(0, 300)}`;
   }
 
-  const payload = { title, description, imageUrl, siteName, author, publishedAt, aiSummary: sentence(aiSummary), keyPoints, paragraphs: paragraphs.slice(0, 28) };
+  if (!isQualitySummary(aiSummary, 80)) {
+    const fallback = paragraphs.slice(0, 6).join("");
+    aiSummary = isQualitySummary(fallback, 80) ? fallback : description;
+  }
+  const safeParagraphs = paragraphs
+    .map((item) => finishSentence(item))
+    .filter((item) => isQualitySummary(item, 28) && !hasEncodingGarbage(item))
+    .slice(0, 28);
+  const payload = {
+    title: isQualityTitle(title, body.source) ? title : cleanContentText(body.title || "原文资讯", body.source),
+    description: isQualitySummary(description, 18) ? description : safeParagraphs[0] || "",
+    imageUrl, siteName, author, publishedAt,
+    aiSummary: finishSentence(aiSummary),
+    keyPoints,
+    paragraphs: safeParagraphs,
+    structuredEvidence,
+  };
   articleCache.set(cacheKey, { at: Date.now(), payload });
   while (articleCache.size > 100) articleCache.delete(articleCache.keys().next().value ?? "");
   return NextResponse.json(payload, { headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800" } });
