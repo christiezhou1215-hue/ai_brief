@@ -1,14 +1,39 @@
 import { NextResponse } from "next/server";
+import { cleanContentText, hasEncodingGarbage, isQualitySummary, isQualityTitle } from "../../../lib/content-quality";
 
 export const dynamic = "force-dynamic";
 
 type Source = { name: string; mark: string; url: string; homepage?: string; type?: "rss" | "atom"; tier: 1 | 2 | 3; chinese?: boolean };
+type ChannelTier = "T1" | "T1.5" | "T2";
+type AcquisitionMethod = "RSS" | "Atom" | "官方 API" | "HTML" | "搜索聚合" | "第三方接口";
+type SelectionStatus = "精选" | "候选" | "观察" | "淘汰";
+type ScoreBreakdown = {
+  sourceQuality: number; industryImpact: number; recency: number;
+  multiSource: number; completeness: number; userRelevance: number;
+};
+type SourceFetchResult = { items: NewsItem[]; rawItemCount: number };
+type SelectionEvidence = {
+  hasNewFact: boolean; coreChange: string; containsSpecifics: boolean;
+  evidenceStrength: "强" | "中" | "弱"; likelyRepost: boolean;
+  marketingRisk: boolean; uncertainty: string;
+};
+type SelectionBreakdown = {
+  informationGain: number; industryImpact: number; evidenceStrength: number;
+  specificity: number; timeliness: number; userRelevance: number;
+};
 export type NewsItem = {
   id: string; title: string; source: string; sourceMark: string; publishedAt: string; url: string;
   category: string; level: "重要" | "关注" | "一般"; score: number; trustScore: number;
   trustLabel: "高可信" | "较可信" | "待核实"; summary: string; tags: string[];
   related: number; sourceMentions: string[]; imageUrl?: string;
+  recommendationReasons: string[]; importanceReason: string;
+  eventTitle: string; eventKey: string; entities: string[]; keyFacts: string[];
+  scoreBreakdown: ScoreBreakdown; uncertainty: string; trendKey: string;
+  selectionScore: number; selectionStatus: SelectionStatus; selectionEvidence: SelectionEvidence;
+  selectionBreakdown: SelectionBreakdown; scoringVersion: string;
 };
+
+const SCORING_VERSION = "selection-v12.0";
 
 const newsSearch = (name: string, mark: string, query: string, chinese = true, tier: 1 | 2 | 3 = 2, homepage?: string): Source => ({
   name, mark, tier, chinese, homepage,
@@ -304,7 +329,7 @@ const cleanTitle = (value: string, sourceName = "") => {
     .replace(/\s*(?:[-—–_|｜]|·)+\s*(?:阿里云开发者社区|腾讯云开发者社区|华为云开发者联盟|CSDN博客|掘金|光明网|新华网|人民网|中国新闻网|央视网|新浪科技|搜狐(?:新闻|科技)?|网易科技|凤凰科技|澎湃新闻|极客公园|品玩|量子位|机器之心|雷峰网|Sohu|QQ\s*News|腾讯新闻)(?:\s*(?:[-—–_|｜]|·))?\s*$/i, "")
     .replace(/\s*(?:[-—–_|｜]|·)\s*(?:www\.)?[\w.-]+\.(?:com|cn|net|org)(?:\.cn)?\s*$/i, "")
     .trim();
-  return stripNoise(text);
+  return cleanContentText(stripNoise(text), sourceName);
 };
 const splitDigestTitle = (title: string) => {
   const digest = /^(?:早报|晚报|晨报|日报|速览|今日热点|科技早知道)\s*[｜|:：]/.test(title);
@@ -325,12 +350,154 @@ const categoryFor = (text: string) => /agent|智能体|copilot/i.test(text) ? "A
   : /open.?source|开源|github/i.test(text) ? "开源项目"
   : /paper|research|benchmark|arxiv|研究|论文/i.test(text) ? "学术研究"
   : /model|gpt|gemini|claude|模型/i.test(text) ? "模型发布" : "行业动态";
+const importanceFor = (category: string, text: string) =>
+  /芯片|算力|gpu|nvidia|amd/i.test(text) ? "这项变化可能影响 AI 基础设施的供给、成本与竞争格局。"
+  : /政策|监管|法规|标准|安全|治理/i.test(text) ? "这项变化可能影响 AI 产品的准入要求、安全边界与落地节奏。"
+  : category === "模型发布" ? "这项变化可能影响模型能力边界、调用成本与产品竞争格局。"
+  : category === "AI Agent" ? "这项变化反映智能体正在从能力演示走向真实工作流程与企业部署。"
+  : category === "AI 编程" ? "这项变化可能改变开发工具的使用方式、研发效率与软件交付流程。"
+  : category === "开源项目" ? "这项变化可能降低技术使用门槛，并加快开发者生态与应用扩散。"
+  : category === "学术研究" ? "这项研究为模型能力、评测方法或技术路线提供了新的可验证证据。"
+  : "这项变化可能影响 AI 产品落地、商业竞争或行业资源配置。";
+const trendFor = (category: string, text: string) =>
+  /政策|监管|法规|标准|安全|治理|合规/i.test(text) ? "AI 安全、治理与标准"
+  : /成本|价格|降价|token|推理效率/i.test(text) ? "模型成本与推理效率"
+  : /芯片|算力|gpu|nvidia|amd|数据中心/i.test(text) ? "算力与基础设施"
+  : category === "AI Agent" ? "智能体与工作流"
+  : category === "AI 编程" ? "AI 开发工具"
+  : category === "开源项目" ? "开源生态"
+  : category === "学术研究" ? "前沿研究"
+  : category === "模型发布" ? "模型能力演进"
+  : "AI 产品与行业应用";
+const sourceClassFor = (source: Source) => {
+  if (source.tier === 1) return "一手官方来源";
+  if (
+    source.tier === 3
+    || /开发者|社区|博客园|CSDN|掘金|SegmentFault|开源中国|Datawhale|51CTO|PaperWeekly|魔搭|飞桨|MindSpore|OpenI|Gitee/i.test(source.name)
+  ) return "开发者与社区来源";
+  if (
+    /新华|人民|央视|中新|澎湃|财新|第一财经|经济|证券|日报|晚报|周末|都市|光明|中国网|青年报|财联社|界面|新浪|搜狐|网易|凤凰|环球|上观|南方|腾讯科技/i.test(source.name)
+  ) return "综合新闻媒体";
+  return "专业科技媒体";
+};
+const channelProfileFor = (source: Source): {
+  channelTier: ChannelTier; acquisitionMethod: AcquisitionMethod; monitoringScope: string;
+} => {
+  const isSearchAggregation = /news\.google\.com\/rss\/search/.test(source.url);
+  const official = sourceClassFor(source) === "一手官方来源";
+  const broadAnnouncementChannel = /Newsroom|新闻中心|全站|科技$|日报|晚报|综合/i.test(source.name);
+  const socialChannel = /\bX\b|Twitter|微博|官微|官方账号/i.test(source.name);
+  const channelTier: ChannelTier = official && !isSearchAggregation && !broadAnnouncementChannel
+    ? "T1"
+    : official || socialChannel || source.tier === 2
+      ? "T1.5"
+      : "T2";
+  const acquisitionMethod: AcquisitionMethod = isSearchAggregation
+    ? "搜索聚合"
+    : source.type === "atom"
+      ? "Atom"
+      : "RSS";
+  const monitoringScope = isSearchAggregation
+    ? "指定域名的 AI 相关内容"
+    : /artificial|machine-learning|generative-ai|\/ai(?:\/|$)|cs\.AI|cs\.CL/i.test(source.url)
+      ? "AI 专题或指定栏目"
+      : official
+        ? "官方发布通道"
+        : "站点资讯流，经 AI 相关性过滤";
+  return { channelTier, acquisitionMethod, monitoringScope };
+};
+const selectionEvidenceFor = (
+  title: string,
+  summary: string,
+  source: Source,
+  scoreBreakdown: ScoreBreakdown,
+): { evidence: SelectionEvidence; breakdown: SelectionBreakdown; score: number; status: SelectionStatus } => {
+  const text = `${title} ${summary}`;
+  const specifics = (text.match(/\d+(?:\.\d+)?%?|20\d{2}年|\d+亿元|\d+亿美元|\d+[万亿]|API|开源|正式发布|正式上线/gi) ?? []).length;
+  const likelyRepost = /转载|综合自|消息称|据.*报道|援引|早报|晚报|日报|周报|盘点|合集/i.test(text);
+  const marketingRisk = /限时|优惠|扫码|点击领取|欢迎关注|火爆|震撼|颠覆世界|必看|速抢/i.test(text);
+  const anonymous = /知情人士|消息人士|网传|爆料|据悉|传闻/i.test(text);
+  const informationGain = Math.max(10, Math.min(100,
+    42 + specifics * 9
+    + (/发布|推出|上线|开源|签署|收购|融资|降价|升级|通过|批准|起诉/i.test(text) ? 24 : 0)
+    - (likelyRepost ? 18 : 0)
+  ));
+  const evidenceStrength = Math.max(10, Math.min(100,
+    scoreBreakdown.sourceQuality
+    + (specifics >= 2 ? 8 : 0)
+    - (anonymous ? 24 : 0)
+    - (likelyRepost ? 8 : 0)
+  ));
+  const breakdown: SelectionBreakdown = {
+    informationGain,
+    industryImpact: scoreBreakdown.industryImpact,
+    evidenceStrength,
+    specificity: Math.min(100, 28 + specifics * 18 + (summary.length >= 90 ? 18 : 0)),
+    timeliness: scoreBreakdown.recency,
+    userRelevance: 50,
+  };
+  const penalty = (likelyRepost ? 15 : 0) + (marketingRisk ? 20 : 0) + (informationGain < 42 ? 20 : 0);
+  const score = Math.max(0, Math.min(100, Math.round(
+    breakdown.informationGain * .25
+    + breakdown.industryImpact * .25
+    + breakdown.evidenceStrength * .2
+    + breakdown.specificity * .1
+    + breakdown.timeliness * .1
+    + breakdown.userRelevance * .1
+    - penalty
+  )));
+  const status: SelectionStatus = anonymous && evidenceStrength < 70
+    ? "候选"
+    : score >= 72
+      ? "精选"
+      : score >= 54
+        ? "候选"
+        : score >= 38
+          ? "观察"
+          : "淘汰";
+  const coreChange = completeSentence(title);
+  return {
+    evidence: {
+      hasNewFact: informationGain >= 58,
+      coreChange,
+      containsSpecifics: specifics > 0,
+      evidenceStrength: evidenceStrength >= 80 ? "强" : evidenceStrength >= 60 ? "中" : "弱",
+      likelyRepost,
+      marketingRisk,
+      uncertainty: anonymous
+        ? "信息包含匿名或尚未公开确认的表述，需要等待官方或更多独立来源验证。"
+        : "当前结论基于已抓取内容，后续执行结果和行业影响仍需持续观察。",
+    },
+    breakdown,
+    score,
+    status,
+  };
+};
 const normalize = (title: string) => title.toLowerCase()
-  .replace(/(?:最新|重磅|突发|官宣|独家|刚刚)/g, "").replace(/\s*[-—_|]\s*[^-—_|]{1,30}$/g, "")
+  .replace(/(?:最新|重磅|突发|官宣|独家|刚刚|正式宣布|正式发布|宣布推出)/g, "")
+  .replace(/\b(?:announces?|launches?|releases?|unveils?|introduces?)\b/g, "")
+  .replace(/\s*[-—_|]\s*[^-—_|]{1,30}$/g, "")
   .replace(/[^a-z0-9\u4e00-\u9fff]/g, "").slice(0, 54);
+const eventTokens = (title: string) => [...new Set(
+  title.toLowerCase().match(/[a-z][a-z0-9.-]{2,}|[\u4e00-\u9fff]{2,8}/g)
+    ?.filter((token) => !/最新|重磅|正式|发布|推出|宣布|上线|开放|消息|报道|公司|科技/.test(token)) ?? []
+)];
+const entityList = (text: string) => [...new Set(
+  text.match(/\b(?:OpenAI|Anthropic|DeepSeek|Google|Gemini|Claude|Meta|Microsoft|NVIDIA|AMD|Apple|Amazon|AWS|xAI|Mistral|Qwen|Llama|GPT)[\w.-]*\b|[\u4e00-\u9fff]{2,8}(?:公司|实验室|研究院|大学|模型|平台|芯片)/gi) ?? []
+)].slice(0, 8);
+const factList = (text: string) => [...new Set(
+  text.match(/[^。！？.!?]*(?:\d+(?:\.\d+)?%?|20\d{2}年|\d+亿元|\d+亿美元|\d+[万亿]|正式发布|正式上线|开源)[^。！？.!?]*[。！？.!?]/g)
+    ?.map((item) => item.trim()).filter((item) => item.length >= 12) ?? []
+)].slice(0, 5);
+const tokenSimilarity = (left: string[], right: string[]) => {
+  if (!left.length || !right.length) return 0;
+  const rightSet = new Set(right);
+  const intersection = left.filter((token) => rightSet.has(token)).length;
+  return intersection / Math.max(left.length, right.length);
+};
 
 const memoryCache = new Map<string, { at: number; payload: unknown }>();
-const sourceHealth = new Map<string, { lastSuccessAt: number; failures: number }>();
+const sourceHealth = new Map<string, { lastSuccessAt: number; failures: number; attempts: number; successes: number }>();
 const RECENT_SUCCESS_WINDOW = 6 * 60 * 60_000;
 
 async function mapConcurrent<T, R>(items: T[], limit: number, worker: (item: T, index: number) => Promise<R>) {
@@ -350,7 +517,7 @@ async function mapConcurrent<T, R>(items: T[], limit: number, worker: (item: T, 
   return results;
 }
 
-async function fetchSource(source: Source, timeout = 5_500): Promise<NewsItem[]> {
+async function fetchSource(source: Source, timeout = 5_500): Promise<SourceFetchResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
@@ -362,27 +529,70 @@ async function fetchSource(source: Source, timeout = 5_500): Promise<NewsItem[]>
     if (!response.ok) throw new Error(String(response.status));
     const xml = await response.text();
     const atom = source.type === "atom";
+    const channelProfile = channelProfileFor(source);
     const blocks = xml.match(atom ? /<entry\b[\s\S]*?<\/entry>/gi : /<item\b[\s\S]*?<\/item>/gi) ?? [];
-    return blocks.slice(0, 18).flatMap((block, index) => {
+    const items = blocks.slice(0, 18).flatMap((block, index) => {
       const title = cleanTitle(field(block, "title"), source.name);
       const fullSummary = short(field(block, atom ? "summary" : "description") || field(block, "content:encoded"), 430);
       const publishedAt = decode(field(block, atom ? "published" : "pubDate") || field(block, "updated")) || new Date().toISOString();
-      const baseTrust = source.tier === 1 ? 88 : source.tier === 2 ? 74 : 61;
+      const baseTrust = channelProfile.channelTier === "T1" ? 90 : channelProfile.channelTier === "T1.5" ? 76 : 62;
       const imageUrl = block.match(/<(?:media:content|media:thumbnail|enclosure)\b[^>]+url=["']([^"']+)["']/i)?.[1]
         ?? block.match(/<img\b[^>]+(?:data-src|src)=["']([^"']+)["']/i)?.[1];
       return splitDigestTitle(title).map((focusedTitle, partIndex) => {
         const summary = focusedSummary(focusedTitle, fullSummary);
         const text = `${focusedTitle} ${summary}`;
-        const score = Math.min(100, baseTrust - 20 + (/发布|推出|上线|开源|release|launch/i.test(text) ? 18 : 0) + (/gpt|gemini|claude|deepseek|模型/i.test(text) ? 11 : 0));
+        const ageHours = Math.max(0, (Date.now() - new Date(publishedAt).getTime()) / 3_600_000);
+        const evidence = (text.match(/\d+(?:\.\d+)?%?|20\d{2}年|\d+亿元|\d+亿美元|\d+[万亿]/g) ?? []).length;
+        const scoreBreakdown: ScoreBreakdown = {
+          sourceQuality: baseTrust,
+          industryImpact: Math.min(100,
+            38 + (/发布|推出|上线|开源|release|launch/i.test(text) ? 22 : 0)
+            + (/成本|价格|融资|政策|监管|安全|芯片|算力|生态|竞争|部署/i.test(text) ? 22 : 0)
+            + (/gpt|gemini|claude|deepseek|模型|智能体/i.test(text) ? 12 : 0)
+          ),
+          recency: ageHours <= 6 ? 100 : ageHours <= 24 ? 88 : ageHours <= 72 ? 68 : ageHours <= 168 ? 42 : 20,
+          multiSource: 20,
+          completeness: Math.min(100, 38 + Math.min(28, evidence * 8) + (summary.length >= 70 && summary.length <= 360 ? 28 : 8)),
+          // The API has no user identity. The neutral value is replaced by a
+          // topic-match contribution in the browser when the user has subscriptions.
+          userRelevance: 50,
+        };
+        const score = Math.round(
+          scoreBreakdown.sourceQuality * .25 + scoreBreakdown.industryImpact * .25
+          + scoreBreakdown.recency * .15 + scoreBreakdown.multiSource * .15
+          + scoreBreakdown.completeness * .1 + scoreBreakdown.userRelevance * .1
+          - (/早报|晚报|日报|周报|月报|盘点|合集/.test(focusedTitle) ? 10 : 0)
+          - (summary === focusedTitle ? 18 : 0)
+        );
         const level: NewsItem["level"] = score >= 77 ? "重要" : score >= 58 ? "关注" : "一般";
+        const category = categoryFor(text);
+        const selection = selectionEvidenceFor(focusedTitle, summary, source, scoreBreakdown);
         return {
           id: `${source.mark}-${index}-${partIndex}-${publishedAt}`, title: focusedTitle, source: source.name, sourceMark: source.mark,
-          publishedAt, url: linkFor(block, atom), category: categoryFor(text), level, score,
+          publishedAt, url: linkFor(block, atom), category, level, score,
           trustScore: baseTrust, trustLabel: baseTrust >= 82 ? "高可信" : baseTrust >= 68 ? "较可信" : "待核实",
-          summary, tags: [categoryFor(text), source.chinese ? "中文" : "国际"], related: 1, sourceMentions: [source.name], imageUrl,
+          summary, tags: [category, source.chinese ? "中文" : "国际"], related: 1, sourceMentions: [source.name], imageUrl,
+          recommendationReasons: [], importanceReason: importanceFor(category, text),
+          eventTitle: focusedTitle, eventKey: normalize(focusedTitle),
+          entities: entityList(text), keyFacts: factList(summary),
+          scoreBreakdown,
+          uncertainty: "当前仅由单一来源提及，关键事实仍需等待更多独立来源验证。",
+          trendKey: trendFor(category, text),
+          selectionScore: selection.score,
+          selectionStatus: selection.status,
+          selectionEvidence: selection.evidence,
+          selectionBreakdown: selection.breakdown,
+          scoringVersion: SCORING_VERSION,
         } satisfies NewsItem;
       });
-    }).filter((item) => item.title && item.url && (source.tier === 1 || isAi(`${item.title} ${item.summary}`)));
+    }).filter((item) =>
+      item.url
+      && isQualityTitle(item.title, source.name)
+      && isQualitySummary(item.summary, 18)
+      && !hasEncodingGarbage(`${item.title}${item.summary}`)
+      && (source.tier === 1 || isAi(`${item.title} ${item.summary}`))
+    );
+    return { items, rawItemCount: Math.min(18, blocks.length) };
   } finally { clearTimeout(timer); }
 }
 
@@ -393,54 +603,164 @@ export async function GET(request: Request) {
   const cacheKey = requested ? `source:${requested}` : `disabled:${[...disabled].sort().join("|")}`;
   const cached = memoryCache.get(cacheKey);
   if (cached && Date.now() - cached.at < 15 * 60_000) {
-    return NextResponse.json(cached.payload, { headers: { "X-AI-Brief-Cache": "HIT" } });
+    return NextResponse.json(cached.payload, { headers: {
+      "X-AI-Brief-Cache": "HIT",
+      "Cache-Control": "public, s-maxage=900, stale-while-revalidate=86400",
+    } });
   }
   const visibleSources = requested ? sources.filter((source) => source.name === requested) : sources;
-  const active = visibleSources.filter((source) => !disabled.has(source.name));
+  const active = visibleSources.filter((source) => !disabled.has(source.name)).sort((a, b) => a.tier - b.tier);
   if (!active.length && requested) return NextResponse.json({ error: "Unknown source" }, { status: 400 });
-  const results = await mapConcurrent(active, 48, (source) => fetchSource(source));
-  const failedIndexes = results.map((result, index) => result.status === "rejected" ? index : -1).filter((index) => index >= 0);
-  if (failedIndexes.length) {
-    const retries = await mapConcurrent(failedIndexes, 32, (index) => fetchSource(active[index], 4_500));
-    retries.forEach((result, retryIndex) => {
-      if (result.status === "fulfilled") results[failedIndexes[retryIndex]] = result;
-    });
-  }
+  // Keep the first payload fast: failed sources retry on the next refresh rather than
+  // extending the current request beyond the page's loading budget.
+  const results = await mapConcurrent(active, 120, (source) => fetchSource(source, 3_200));
   const groups = new Map<string, NewsItem>();
+  const tokenIndex = new Map<string, Set<string>>();
   results.forEach((result) => {
     if (result.status !== "fulfilled") return;
-    result.value.forEach((item) => {
-      const key = normalize(item.title);
+    result.value.items.forEach((item) => {
+      const exactKey = normalize(item.title);
+      const tokens = eventTokens(item.title);
+      const candidates = [...new Set(tokens.flatMap((token) => [...(tokenIndex.get(token) ?? [])]))];
+      const similarKey = candidates.find((candidateKey) => {
+        const candidate = groups.get(candidateKey);
+        if (!candidate) return false;
+        const hours = Math.abs(new Date(candidate.publishedAt).getTime() - new Date(item.publishedAt).getTime()) / 3_600_000;
+        return hours <= 96 && tokenSimilarity(tokens, eventTokens(candidate.title)) >= .58;
+      });
+      const key = groups.has(exactKey) ? exactKey : similarKey ?? exactKey;
       const existing = groups.get(key);
       if (existing) {
         existing.related += 1;
         existing.sourceMentions = [...new Set([...existing.sourceMentions, item.source])];
         existing.trustScore = Math.min(99, Math.max(existing.trustScore, item.trustScore) + Math.min(9, existing.related * 2));
         existing.trustLabel = existing.trustScore >= 82 ? "高可信" : existing.trustScore >= 68 ? "较可信" : "待核实";
-      } else groups.set(key, item);
+        existing.scoreBreakdown.multiSource = Math.min(100, 20 + existing.related * 18);
+        existing.score = Math.round(
+          existing.scoreBreakdown.sourceQuality * .25 + existing.scoreBreakdown.industryImpact * .25
+          + existing.scoreBreakdown.recency * .15 + existing.scoreBreakdown.multiSource * .15
+          + existing.scoreBreakdown.completeness * .1 + existing.scoreBreakdown.userRelevance * .1
+        );
+        existing.level = existing.score >= 77 ? "重要" : existing.score >= 58 ? "关注" : "一般";
+        existing.entities = [...new Set([...existing.entities, ...item.entities])].slice(0, 8);
+        existing.keyFacts = [...new Set([...existing.keyFacts, ...item.keyFacts])].slice(0, 6);
+        existing.selectionBreakdown.evidenceStrength = Math.min(100, existing.selectionBreakdown.evidenceStrength + 8);
+        existing.selectionScore = Math.min(100, Math.round(
+          existing.selectionBreakdown.informationGain * .25
+          + existing.selectionBreakdown.industryImpact * .25
+          + existing.selectionBreakdown.evidenceStrength * .2
+          + existing.selectionBreakdown.specificity * .1
+          + existing.selectionBreakdown.timeliness * .1
+          + existing.selectionBreakdown.userRelevance * .1
+          + Math.min(10, (existing.related - 1) * 3)
+        ));
+        existing.selectionStatus = existing.related >= 3 && existing.selectionScore >= 68
+          ? "精选"
+          : existing.selectionScore >= 54 ? "候选" : "观察";
+        existing.selectionEvidence.evidenceStrength = existing.related >= 3 ? "强" : "中";
+        existing.uncertainty = existing.related >= 3
+          ? "该事件已获得多个独立来源印证，但后续影响和执行结果仍需持续观察。"
+          : "已有不同来源提及该事件，关键细节仍需进一步交叉验证。";
+      } else {
+        item.eventKey = key;
+        groups.set(key, item);
+        tokens.forEach((token) => {
+          const indexed = tokenIndex.get(token) ?? new Set<string>();
+          indexed.add(key);
+          tokenIndex.set(token, indexed);
+        });
+      }
     });
   });
-  const items = [...groups.values()].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 420);
+  const items = [...groups.values()].filter((item) => item.selectionStatus !== "淘汰").sort((a, b) =>
+    (b.selectionScore + b.related * 3) - (a.selectionScore + a.related * 3)
+    || new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+  ).slice(0, 420).map((item) => {
+    const ageHours = Math.max(0, (Date.now() - new Date(item.publishedAt).getTime()) / 3_600_000);
+    const reasons = [
+      ...(item.related >= 3 ? [`${item.related} 个独立来源交叉提及`] : []),
+      ...(item.trustScore >= 82 ? ["一手或高质量来源"] : []),
+      ...(item.score >= 84 ? ["行业影响评分较高"] : []),
+      ...(item.selectionEvidence.hasNewFact ? ["相比已有信息增加了新事实"] : []),
+      ...(ageHours <= 24 ? ["24 小时内发布"] : []),
+      ...(/\d+(?:\.\d+)?%?|20\d{2}年|\d+亿元|\d+亿美元|\d+[万亿]/.test(`${item.title}${item.summary}`) ? ["包含明确数据或时间"] : []),
+    ];
+    item.recommendationReasons = [...new Set(reasons)].slice(0, 3);
+    return item;
+  });
   const statuses = visibleSources.map((source) => {
     const index = active.findIndex((item) => item.name === source.name);
     const enabled = index >= 0;
     const result = enabled ? results[index] : undefined;
     const succeeded = result?.status === "fulfilled";
     const previous = sourceHealth.get(source.name);
-    if (succeeded) sourceHealth.set(source.name, { lastSuccessAt: Date.now(), failures: 0 });
-    else if (enabled) sourceHealth.set(source.name, { lastSuccessAt: previous?.lastSuccessAt ?? 0, failures: (previous?.failures ?? 0) + 1 });
+    if (succeeded) sourceHealth.set(source.name, {
+      lastSuccessAt: Date.now(), failures: 0,
+      attempts: (previous?.attempts ?? 0) + 1, successes: (previous?.successes ?? 0) + 1,
+    });
+    else if (enabled) sourceHealth.set(source.name, {
+      lastSuccessAt: previous?.lastSuccessAt ?? 0, failures: (previous?.failures ?? 0) + 1,
+      attempts: (previous?.attempts ?? 0) + 1, successes: previous?.successes ?? 0,
+    });
     const recentlyHealthy = Boolean(previous?.lastSuccessAt && Date.now() - previous.lastSuccessAt < RECENT_SUCCESS_WINDOW);
     const health = !enabled ? "disabled" : succeeded ? "online" : recentlyHealthy ? "degraded" : "offline";
+    const failures = succeeded ? 0 : (previous?.failures ?? 0) + (enabled ? 1 : 0);
+    const channelProfile = channelProfileFor(source);
+    const baseQuality = channelProfile.channelTier === "T1" ? 90 : channelProfile.channelTier === "T1.5" ? 76 : 62;
+    const itemCount = result?.status === "fulfilled" ? result.value.items.length : 0;
+    const rawItemCount = result?.status === "fulfilled" ? result.value.rawItemCount : 0;
+    const currentHistory = sourceHealth.get(source.name);
+    const successRate = currentHistory?.attempts ? Math.round(currentHistory.successes / currentHistory.attempts * 100) : 0;
+    const sourceEvents = items.filter((item) => item.sourceMentions.includes(source.name));
+    const multiSourceRate = sourceEvents.length
+      ? Math.round(sourceEvents.filter((item) => item.related >= 2).length / sourceEvents.length * 100) : 0;
+    const noiseRate = rawItemCount ? Math.round(Math.max(0, rawItemCount - itemCount) / rawItemCount * 100) : 100;
+    const completenessRate = rawItemCount ? Math.round(itemCount / rawItemCount * 100) : 0;
+    const signalDensity = rawItemCount ? Math.round(itemCount / rawItemCount * 100) : 0;
+    const firstReportContribution = sourceEvents.length
+      ? Math.round(sourceEvents.filter((item) => item.source === source.name).length / sourceEvents.length * 100)
+      : 0;
+    const averageDiscoveryLatencyMinutes = sourceEvents.length
+      ? Math.round(sourceEvents.reduce((sum, item) => sum + Math.max(0, Date.now() - new Date(item.publishedAt).getTime()) / 60_000, 0) / sourceEvents.length)
+      : 0;
+    const recencyHealth = succeeded ? 100 : health === "degraded" ? 58 : 15;
+    const qualityScore = Math.max(20, Math.min(98, Math.round(
+      baseQuality * .35
+      + successRate * .2
+      + completenessRate * .15
+      + multiSourceRate * .15
+      + recencyHealth * .15
+      - Math.min(16, failures * 3)
+    )));
     return {
       name: source.name, mark: source.mark, homepage: source.homepage ?? new URL(source.url).origin, type: source.type ?? "rss",
-      chinese: Boolean(source.chinese), trustScore: source.tier === 1 ? 88 : source.tier === 2 ? 74 : 61, enabled,
+      chinese: Boolean(source.chinese), trustScore: baseQuality, enabled,
       ok: health === "online" || health === "degraded", health,
-      itemCount: result?.status === "fulfilled" ? result.value.length : 0,
+      itemCount, rawItemCount, successRate, multiSourceRate, noiseRate,
+      recentValidItems: sourceEvents.filter((item) => Date.now() - new Date(item.publishedAt).getTime() <= 30 * 86_400_000).length,
+      sourceTier: source.tier, sourceClass: sourceClassFor(source),
+      channelTier: channelProfile.channelTier,
+      acquisitionMethod: channelProfile.acquisitionMethod,
+      monitoringScope: channelProfile.monitoringScope,
+      signalDensity, firstReportContribution, averageDiscoveryLatencyMinutes,
+      validItemCost: channelProfile.acquisitionMethod === "第三方接口" ? 1.8 : channelProfile.acquisitionMethod === "HTML" ? .35 : .08,
+      lastManualReviewAt: "2026-07-30",
+      qualityLevel: qualityScore >= 82 ? "优先" : qualityScore >= 65 ? "正常" : qualityScore >= 48 ? "观察" : "建议停用",
+      recommendation: qualityScore < 48 || failures >= 3 ? "建议暂停并检查来源" : qualityScore < 65 ? "降低排序权重" : "保持当前权重",
+      completenessRate,
+      lastCheckedAt: new Date().toISOString(),
+      lastSuccessAt: currentHistory?.lastSuccessAt ? new Date(currentHistory.lastSuccessAt).toISOString() : "",
     };
   });
   const payload = {
     items, sources: statuses, updatedAt: new Date().toISOString(),
     healthySources: statuses.filter((item) => item.ok).length, totalSources: statuses.length,
+    selectionStats: {
+      selected: items.filter((item) => item.selectionStatus === "精选").length,
+      candidate: items.filter((item) => item.selectionStatus === "候选").length,
+      observing: items.filter((item) => item.selectionStatus === "观察").length,
+      scoringVersion: SCORING_VERSION,
+    },
   };
   if (items.length) {
     memoryCache.set(cacheKey, { at: Date.now(), payload });
