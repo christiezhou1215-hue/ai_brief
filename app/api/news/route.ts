@@ -304,7 +304,10 @@ const short = (value: string, max = 150) => {
     .replace(/(?:微信公众号|微信号|更多精彩内容)[\s\S]*$/i, "")
     .replace(/\s+/g, " ").trim();
   if (!text) return "";
-  const sentences = text.match(/[^。！？.!?]+[。！？.!?]/g)?.map((item) => item.trim()).filter((item) => item.length >= 12) ?? [];
+  const sentences = text
+    .split(/(?<=[。！？!?])\s*|(?<=[.!?])\s+(?=[A-Z\u4e00-\u9fff])/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 12 && /[。！？.!?]$/.test(item));
   const selected = sentences.slice(0, 3).join("");
   if (selected && selected.length <= max + 30) return selected;
   const candidate = selected || completeSentence(text);
