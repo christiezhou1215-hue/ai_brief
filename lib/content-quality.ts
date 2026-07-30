@@ -62,7 +62,8 @@ export const hasBrokenFactFragment = (value = "") => {
     || /(?:涨|跌|增长|下降|提升|降低|减少|增加)(?:超|约)?\s*\d+\.(?!\d)/.test(text)
     || /(?:^|[。！？；])[^。！？；]{0,8}(?:\.|。)(?:$|\s)/.test(text)
     || /[/｜]\s*(?:[\u4e00-\u9fff]{2,}|[A-Z][A-Za-z0-9_-]+)/.test(text)
-    || /(?:^|[。！？；])(?:以及|同时|此外|其中|并且|但|而|与|和|或)\s*[。！？；]?$/.test(text);
+    || /(?:以及|同时|此外|其中|并且|但是|而且|包括|例如|以及对|与|和|或)\s*[。！？；]?$/.test(text)
+    || /\b(?:and|or|to|of|with|including|such as|in addition to)\s*[。.!?]?$/i.test(text);
 };
 
 export const completeSentences = (value = "") =>
