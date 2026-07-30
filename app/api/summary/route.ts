@@ -124,6 +124,25 @@ async function createSummary(inputStories: SummaryStory[]) {
         : conclusions;
       summary = accepted.map(composeConclusion).join("").slice(0, 320);
     }
+    if (!summary) {
+      const rewritten = await generateJson<{ summary: string }>(
+        `你是科技媒体总编辑。根据经过质量过滤的今日材料，写出三条真正的行业结论，不要排列新闻。
+只返回 JSON：{"summary":"结论一。结论二。结论三。"}。
+必须恰好三个完整中文句子，每句42至100个汉字。每句先给出多项相关材料共同反映的具体变化，再说明对能力、成本、开发方式、商业落地或竞争格局的含义。
+不得照抄标题，不得出现媒体名称、新闻数量、来源数量、关注度、口号、残缺数字、斜杠、编号、乱码或截断名称。
+不得把政策讲话、公司产品、安全事故等无关事件强行归为同一趋势，不得推断材料没有说明的因果关系。`,
+        JSON.stringify({ date: day, stories: stories.slice(0, 18) }),
+      );
+      const sentences = splitSentences(cleanStoryText(rewritten?.summary ?? "")).slice(0, 3);
+      if (sentences.length === 3 && sentences.every((sentence) =>
+        validConclusion(sentence)
+        && isQualitySummary(sentence, 42)
+        && !hasEncodingGarbage(sentence)
+        && !hasBrokenFactFragment(sentence)
+      )) {
+        summary = sentences.join("").slice(0, 320);
+      }
+    }
   }
 
   if (!summary) {
