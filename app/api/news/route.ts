@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cleanContentText, hasEncodingGarbage, isQualitySummary, isQualityTitle } from "../../../lib/content-quality";
+import { cleanContentText, hasBrokenFactFragment, hasEncodingGarbage, isQualitySummary, isQualityTitle } from "../../../lib/content-quality";
 
 export const dynamic = "force-dynamic";
 
@@ -332,16 +332,28 @@ const cleanTitle = (value: string, sourceName = "") => {
   return cleanContentText(stripNoise(text), sourceName);
 };
 const splitDigestTitle = (title: string) => {
-  const digest = /^(?:早报|晚报|晨报|日报|速览|今日热点|科技早知道)\s*[｜|:：]/.test(title);
+  const digest = /早报|晚报|晨报|日报|速览|今日热点|早知道|新闻汇|资讯汇/.test(title);
   const body = title.replace(/^(?:早报|晚报|晨报|日报|速览|今日热点|科技早知道)\s*[｜|:：]\s*/, "");
   const parts = body.split(/\s*(?:\/|｜|\|)\s*/).map((part) => part.trim()).filter((part) => part.length >= 8);
   return digest && parts.length >= 2 ? parts.slice(0, 8) : [title];
 };
 const focusedSummary = (headline: string, fullSummary: string) => {
   const keywords = headline.toLowerCase().match(/[a-z][a-z0-9.-]{2,}|[\u4e00-\u9fff]{2,6}/g)?.filter((word) => !/发布|推出|正式|宣布|今日|最新/.test(word)) ?? [];
-  const segments = fullSummary.split(/(?<=[。！？.!?])\s*|[·•]\s*/).map((item) => item.trim()).filter((item) => item.length >= 12);
+  const segments = fullSummary
+    .split(/(?<=[。！？!?])\s*|(?<=[.!?])\s+(?=[A-Z\u4e00-\u9fff])|[·•]\s*/)
+    .map((item) => item.trim()).filter((item) => item.length >= 12);
   const matched = segments.filter((segment) => keywords.some((word) => segment.toLowerCase().includes(word))).slice(0, 2);
   return short(matched.join(""), 220) || completeSentence(headline);
+};
+const isLowInformationItem = (title: string, summary: string) => {
+  const compactTitle = cleanContentText(title).replace(/[^\p{L}\p{N}]/gu, "").toLowerCase();
+  const compactSummary = cleanContentText(summary).replace(/[^\p{L}\p{N}]/gu, "").toLowerCase();
+  const nearDuplicate = compactTitle === compactSummary
+    || (compactTitle.length > 12 && compactSummary.includes(compactTitle) && compactSummary.length - compactTitle.length < 18);
+  return nearDuplicate
+    || /(?:ETF|基金|净流入|净流出|涨停|跌停|涨超|跌超|股价|收盘|开盘|指数)(?:.*(?:人工智能|AI))?/i.test(title)
+    || (/早报|晚报|晨报|日报|早知道|资讯汇|新闻汇/.test(title) && /[\/｜|]/.test(title))
+    || summary.length < 24;
 };
 const isAi = (text: string) => /人工智能|大模型|模型|智能体|机器人|算法|芯片|\bai\b|gpt|claude|gemini|deepseek|llm|agent/i.test(text);
 const categoryFor = (text: string) => /agent|智能体|copilot/i.test(text) ? "AI Agent"
@@ -539,7 +551,7 @@ async function fetchSource(source: Source, timeout = 5_500): Promise<SourceFetch
       const imageUrl = block.match(/<(?:media:content|media:thumbnail|enclosure)\b[^>]+url=["']([^"']+)["']/i)?.[1]
         ?? block.match(/<img\b[^>]+(?:data-src|src)=["']([^"']+)["']/i)?.[1];
       return splitDigestTitle(title).map((focusedTitle, partIndex) => {
-        const summary = focusedSummary(focusedTitle, fullSummary);
+        const summary = cleanContentText(focusedSummary(focusedTitle, fullSummary), source.name);
         const text = `${focusedTitle} ${summary}`;
         const ageHours = Math.max(0, (Date.now() - new Date(publishedAt).getTime()) / 3_600_000);
         const evidence = (text.match(/\d+(?:\.\d+)?%?|20\d{2}年|\d+亿元|\d+亿美元|\d+[万亿]/g) ?? []).length;
@@ -590,6 +602,8 @@ async function fetchSource(source: Source, timeout = 5_500): Promise<SourceFetch
       && isQualityTitle(item.title, source.name)
       && isQualitySummary(item.summary, 18)
       && !hasEncodingGarbage(`${item.title}${item.summary}`)
+      && !hasBrokenFactFragment(`${item.title}。${item.summary}`)
+      && !isLowInformationItem(item.title, item.summary)
       && (source.tier === 1 || isAi(`${item.title} ${item.summary}`))
     );
     return { items, rawItemCount: Math.min(18, blocks.length) };
