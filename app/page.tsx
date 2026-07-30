@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { cleanContentText, hasEncodingGarbage, isQualitySummary, isQualityTitle } from "../lib/content-quality";
+import { cleanContentText, hasBrokenFactFragment, hasEncodingGarbage, isQualitySummary, isQualityTitle } from "../lib/content-quality";
 
 type Story = {
   id: string; title: string; source: string; sourceMark: string; publishedAt: string; url: string;
@@ -101,9 +101,10 @@ const matchesTopic = (story: Story, topic: string) => {
 };
 const recommendationReasonsFor = (story: Story, subscribedTopics: string[]) => {
   const followed = subscribedTopics.find((topic) => matchesTopic(story, topic));
+  const hiddenReasons = new Set(["相比已有信息增加了新事实", "包含明确数据或时间"]);
   return [...new Set([
     ...(followed ? [`与你关注的“${followed}”相关`] : []),
-    ...(story.recommendationReasons ?? []),
+    ...(story.recommendationReasons ?? []).filter((reason) => !hiddenReasons.has(reason)),
   ])].slice(0, 3);
 };
 const AnswerContent = ({ content }: { content: string }) => <div className="answer-content">
@@ -225,11 +226,11 @@ export default function Home() {
     if (articleCache) {
       try { articleCacheRef.current = JSON.parse(articleCache); } catch { articleCacheRef.current = {}; }
     }
-    const summaryCache = window.localStorage.getItem("ai-brief-ai-summary-v8");
+    const summaryCache = window.localStorage.getItem("ai-brief-ai-summary-v9");
     if (summaryCache) {
       try {
         const cached = JSON.parse(summaryCache) as { day?: string; summary?: string };
-        if (cached.day === new Date().toISOString().slice(0, 10) && cached.summary && isQualitySummary(cached.summary, 38) && !hasEncodingGarbage(cached.summary)) setAiInsight(cached.summary);
+        if (cached.day === new Date().toISOString().slice(0, 10) && cached.summary && isQualitySummary(cached.summary, 42) && !hasEncodingGarbage(cached.summary) && !hasBrokenFactFragment(cached.summary)) setAiInsight(cached.summary);
       } catch { /* ignore malformed cache */ }
     }
     const disabled = window.localStorage.getItem("ai-brief-disabled-sources");
@@ -538,9 +539,9 @@ export default function Home() {
     void requestSummary().then((data: { summary?: string }) => {
       if (data.summary) {
         const boilerplate = /资讯主要集中在|持续释放.*信号|市场关注度正在上升|值得关注的行业动态|^\s*\d+(?:\.\d+)?\s*(?:将|已|正|在|于)/;
-        if (boilerplate.test(data.summary) || hasEncodingGarbage(data.summary) || !isQualitySummary(data.summary, 38)) return;
+        if (boilerplate.test(data.summary) || hasEncodingGarbage(data.summary) || hasBrokenFactFragment(data.summary) || !isQualitySummary(data.summary, 42)) return;
         setAiInsight(data.summary);
-        window.localStorage.setItem("ai-brief-ai-summary-v8", JSON.stringify({
+        window.localStorage.setItem("ai-brief-ai-summary-v9", JSON.stringify({
           day: new Date().toISOString().slice(0, 10),
           summary: data.summary,
         }));
@@ -612,6 +613,7 @@ export default function Home() {
     window.localStorage.removeItem("ai-brief-ai-summary-v6");
     window.localStorage.removeItem("ai-brief-ai-summary-v7");
     window.localStorage.removeItem("ai-brief-ai-summary-v8");
+    window.localStorage.removeItem("ai-brief-ai-summary-v9");
     window.localStorage.removeItem("ai-brief-article-cache");
     articleCacheRef.current = {};
     setAiInsight("");
