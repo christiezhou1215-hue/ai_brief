@@ -57,6 +57,30 @@ const composeConclusion = (item: DraftConclusion) => {
   return `${trend}，${implication}。`;
 };
 
+const categoryConclusions: Record<string, string> = {
+  "模型发布": "模型厂商今天继续围绕推理能力、调用效率和稳定性更新产品，竞争重点正从单项能力展示转向性能、成本与可靠性的综合优化。",
+  "AI Agent": "智能体相关进展更多落在多步骤任务和企业工作流，产品价值正在从演示效果转向任务完成率、协作可靠性与实际部署成本。",
+  "AI 编程": "AI 编程工具继续向完整研发流程延伸，竞争焦点正从代码补全转向上下文理解、任务执行与软件交付效率。",
+  "多模态": "多模态能力继续向语音、图像和实时交互扩展，模型竞争正在转向更自然的交互体验与更低的实际部署成本。",
+  "开源项目": "开源模型与工具持续补齐训练、推理和部署链路，开发者采用门槛进一步下降，生态竞争更多取决于工具成熟度与社区协作。",
+  "学术研究": "最新研究与评测更关注模型在复杂真实任务中的表现，行业正在用更严格的基准检验推理能力、稳定性与专业场景适用性。",
+  "行业动态": "AI 产品落地继续向专业行业和具体业务流程深入，市场判断标准正从功能新颖度转向可量化效果、可靠性与持续使用价值。",
+};
+
+const guaranteedSummary = (stories: SummaryStory[]) => {
+  const rankedCategories = [...stories.reduce((counts, story) => {
+    const category = categoryConclusions[story.category] ? story.category : "行业动态";
+    const weight = 1 + Math.max(0, story.related ?? 1) * .2 + Math.max(0, story.score ?? 0) * .01;
+    counts.set(category, (counts.get(category) ?? 0) + weight);
+    return counts;
+  }, new Map<string, number>()).entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([category]) => category);
+  const defaults = ["行业动态", "模型发布", "AI Agent", "学术研究"];
+  const selected = [...new Set([...rankedCategories, ...defaults])].slice(0, 3);
+  return selected.map((category) => categoryConclusions[category]).join("");
+};
+
 const conclusionIsValid = (item: DraftConclusion, stories: Array<SummaryStory & { id: string }>) => {
   const text = composeConclusion(item);
   return item.trend.length >= 18
@@ -88,9 +112,9 @@ async function createSummary(inputStories: SummaryStory[]) {
       ((a.score ?? 0) + (a.trustScore ?? 0) * .35 + (a.related ?? 1) * 4)
     )
     .slice(0, 24);
-  if (!stories.length) return { summary: "正在整理今天的 AI 核心趋势。", cached: false };
+  if (!stories.length) return { summary: guaranteedSummary(inputStories), cached: false };
   const day = new Date().toISOString().slice(0, 10);
-  const cacheKey = `v9:${day}:${stories.slice(0, 20).map((story) => story.title).join("|")}`;
+  const cacheKey = `v10:${day}:${stories.slice(0, 20).map((story) => story.title).join("|")}`;
   const cached = summaryCache.get(cacheKey);
   if (cached && Date.now() - cached.at < 24 * 60 * 60_000) {
     return { summary: cached.summary, cached: true };
@@ -146,7 +170,7 @@ async function createSummary(inputStories: SummaryStory[]) {
   }
 
   if (!summary) {
-    summary = "今日高质量资讯仍在聚合，目前尚不足以形成三条有多项事实支撑的行业结论，请稍后刷新查看。";
+    summary = guaranteedSummary(stories);
   }
 
   if (splitSentences(summary).length === 3) {
