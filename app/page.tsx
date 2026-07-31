@@ -58,6 +58,19 @@ const completeSummary = (value = "") => {
   if (!text) return "原文暂未提供摘要，可进入详情查看已抓取的信息。";
   return /[。！？.!?]$/.test(text) ? text : `${text}。`;
 };
+const isEditorialSummary = (value = "") => {
+  const sentences = value.match(/[^。！？]+[。！？]/g) ?? [];
+  const forbidden = /今日高质量资讯仍在聚合|正在整理今天的 AI 核心趋势|请稍后刷新|资讯主要集中在|持续释放.*信号|市场关注度正在上升|值得关注的行业动态/;
+  return sentences.length === 3
+    && sentences.join("").trim() === value.trim()
+    && sentences.every((sentence) =>
+      sentence.trim().length >= 38
+      && isQualitySummary(sentence, 38)
+      && !hasEncodingGarbage(sentence)
+      && !hasBrokenFactFragment(sentence)
+      && !forbidden.test(sentence)
+    );
+};
 const cleanDisplayTitle = (value = "", source = "") => {
   let text = value
     .replace(/^\s*(?:[（(]?\d{1,2}[)）]?\s*[、,，.:：\-]\s*)+/, "")
@@ -226,11 +239,11 @@ export default function Home() {
     if (articleCache) {
       try { articleCacheRef.current = JSON.parse(articleCache); } catch { articleCacheRef.current = {}; }
     }
-    const summaryCache = window.localStorage.getItem("ai-brief-ai-summary-v9");
+    const summaryCache = window.localStorage.getItem("ai-brief-ai-summary-v10");
     if (summaryCache) {
       try {
         const cached = JSON.parse(summaryCache) as { day?: string; summary?: string };
-        if (cached.day === new Date().toISOString().slice(0, 10) && cached.summary && isQualitySummary(cached.summary, 42) && !hasEncodingGarbage(cached.summary) && !hasBrokenFactFragment(cached.summary)) setAiInsight(cached.summary);
+        if (cached.day === new Date().toISOString().slice(0, 10) && cached.summary && isEditorialSummary(cached.summary)) setAiInsight(cached.summary);
       } catch { /* ignore malformed cache */ }
     }
     const disabled = window.localStorage.getItem("ai-brief-disabled-sources");
@@ -527,7 +540,7 @@ export default function Home() {
       // POST remains a quality-preserving fallback when today's corpus changed.
       let response = await fetch("/api/summary", { signal: controller.signal });
       let data = await response.json().catch(() => ({})) as { summary?: string };
-      if (!response.ok || !data.summary || !isQualitySummary(data.summary, 38)) {
+      if (!response.ok || !data.summary || !isEditorialSummary(data.summary)) {
         response = await fetch("/api/summary", {
           method: "POST", signal: controller.signal, headers: { "content-type": "application/json" },
           body: JSON.stringify({ stories: summaryStories }),
@@ -538,10 +551,9 @@ export default function Home() {
     };
     void requestSummary().then((data: { summary?: string }) => {
       if (data.summary) {
-        const boilerplate = /资讯主要集中在|持续释放.*信号|市场关注度正在上升|值得关注的行业动态|^\s*\d+(?:\.\d+)?\s*(?:将|已|正|在|于)/;
-        if (boilerplate.test(data.summary) || hasEncodingGarbage(data.summary) || hasBrokenFactFragment(data.summary) || !isQualitySummary(data.summary, 42)) return;
+        if (!isEditorialSummary(data.summary)) return;
         setAiInsight(data.summary);
-        window.localStorage.setItem("ai-brief-ai-summary-v9", JSON.stringify({
+        window.localStorage.setItem("ai-brief-ai-summary-v10", JSON.stringify({
           day: new Date().toISOString().slice(0, 10),
           summary: data.summary,
         }));
@@ -614,6 +626,7 @@ export default function Home() {
     window.localStorage.removeItem("ai-brief-ai-summary-v7");
     window.localStorage.removeItem("ai-brief-ai-summary-v8");
     window.localStorage.removeItem("ai-brief-ai-summary-v9");
+    window.localStorage.removeItem("ai-brief-ai-summary-v10");
     window.localStorage.removeItem("ai-brief-article-cache");
     articleCacheRef.current = {};
     setAiInsight("");
